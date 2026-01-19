@@ -15,7 +15,7 @@ jobs:
       - name: Configure git
         run: |
           git config user.name "GitHub Actions"
-          git config user.email "kid@nanhaijue1412.onmicrosoft.com"
+          git config user.email "actions@github.com"
       - name: Add upstream repo
         run: git remote add upstream https://github.com/amll-dev/amll-ttml-tool.git
       - name: Fetch upstream
