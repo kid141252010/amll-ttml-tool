@@ -27,10 +27,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: ubuntu-latest
-            args: ""
-            name: linux
-            arch: x86_64
           - platform: windows-latest
             args: ""
             name: windows
