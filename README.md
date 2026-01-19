@@ -17,7 +17,7 @@
 > [!WARNING]
 > 本工具不建议移动手机或小尺寸电子设备使用，操作会非常繁琐！
 
-你可以通过访问 [`https://amll-ttml.20101214.xyz/`](https://amll-ttml-tool.20101214.xyz/)来使用本工具的在线版本。
+你可以通过访问 [`https://amll-tool.20101214.xyz/`](https://amll-tool.20101214.xyz/)来使用本工具的在线版本。
 
 ## 编辑器功能
 
