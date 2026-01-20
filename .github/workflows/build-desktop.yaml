@@ -17,7 +17,7 @@ jobs:
           token: ${{ github.token }}
           assets: |
             *.*
-          tag: ${{ github.ref_name }}-dev
+          tag: ${{ github.ref_name }}-release
           fail-if-no-assets: false
           fail-if-no-release: false
   build-tauri-desktop:
@@ -48,6 +48,8 @@ jobs:
     steps:
       - name: 克隆仓库
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: 缓存 Rust 依赖
         uses: Swatinem/rust-cache@v2
@@ -87,10 +89,13 @@ jobs:
       - name: 安装前端依赖
         run: pnpm i
 
+      - name: 更新版本号
+        run: node scripts/update-version.ts
+
       - name: 构建 AMLL TTML Tools 程序并发布自动构建
         uses: tauri-apps/tauri-action@v0
         with:
-          tagName: ${{ github.ref_name }}
+          tagName: ${{ github.ref_name }}-release
           includeUpdaterJson: true
           releaseName: AMLL TTML Tools ${{ github.ref_name }} branch build
           releaseBody: |

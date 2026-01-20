@@ -1,3 +1,4 @@
+import { uid } from "uid";
 import { type LyricLine, newLyricWord } from "$/types/ttml";
 
 const capitalizeFirstLetter = (str: string) => {
@@ -31,7 +32,8 @@ export function extractParenthesesToBg(line: LyricLine): LyricLine[] {
 		return [line];
 	}
 
-	const mainText = fullText.replace(regex, "").replace(/\s+/g, " ").trim();
+	const rawMainText = fullText.replace(regex, "").replace(/\s+/g, " ").trim();
+	const mainText = capitalizeFirstLetter(rawMainText);
 
 	const rawBgText = matches.map((m) => m[2].trim()).join(" ");
 	const bgText = capitalizeFirstLetter(rawBgText);
@@ -66,6 +68,7 @@ export function extractParenthesesToBg(line: LyricLine): LyricLine[] {
 
 	const bgLine: LyricLine = {
 		...line,
+		id: uid(),
 		isBG: true,
 		words: [
 			{
