@@ -20,6 +20,7 @@ import { uid } from "uid";
 import type {
 	LyricLine,
 	LyricWord,
+	TTMLRomanWord,
 	TTMLLyric,
 	TTMLMetadata,
 	TTMLVocalTag,
@@ -27,20 +28,14 @@ import type {
 import { log } from "../../../utils/logging.ts";
 import { parseTimespan } from "../../../utils/timestamp.ts";
 
-interface RomanWord {
-	startTime: number;
-	endTime: number;
-	text: string;
-}
-
 interface LineMetadata {
 	main: string;
 	bg: string;
 }
 
 interface WordRomanMetadata {
-	main: RomanWord[];
-	bg: RomanWord[];
+	main: TTMLRomanWord[];
+	bg: TTMLRomanWord[];
 }
 
 export function parseLyric(ttmlText: string): TTMLLyric {
@@ -52,15 +47,7 @@ export function parseLyric(ttmlText: string): TTMLLyric {
 
 	log("ttml document parsed", ttmlDoc);
 
-	const itunesTranslations = new Map<string, LineMetadata>();
-	const translationTextElements = ttmlDoc.querySelectorAll(
-		"iTunesMetadata > translations > translation > text[for]",
-	);
-
-	translationTextElements.forEach((textEl) => {
-		const key = textEl.getAttribute("for");
-		if (!key) return;
-
+	const parseTranslationTextElement = (textEl: Element): LineMetadata | null => {
 		let main = "";
 		let bg = "";
 
@@ -82,29 +69,15 @@ export function parseLyric(ttmlText: string): TTMLLyric {
 			.trim();
 
 		if (main.length > 0 || bg.length > 0) {
-			itunesTranslations.set(key, { main, bg });
+			return { main, bg };
 		}
-	});
 
-	const itunesLineRomanizations = new Map<string, LineMetadata>();
-	const parseVocalValue = (value: string | string[] | null | undefined) => {
-		if (!value) return [];
-		const parts = Array.isArray(value) ? value : value.split(/[\s,]+/);
-		return parts.map((v) => v.trim()).filter(Boolean);
+		return null;
 	};
 
-	const itunesWordRomanizations = new Map<string, WordRomanMetadata>();
-
-	const romanizationTextElements = ttmlDoc.querySelectorAll(
-		"iTunesMetadata > transliterations > transliteration > text[for]",
-	);
-
-	romanizationTextElements.forEach((textEl) => {
-		const key = textEl.getAttribute("for");
-		if (!key) return;
-
-		const mainWords: RomanWord[] = [];
-		const bgWords: RomanWord[] = [];
+	const parseRomanizationTextElement = (textEl: Element) => {
+		const mainWords: TTMLRomanWord[] = [];
+		const bgWords: TTMLRomanWord[] = [];
 		let lineRomanMain = "";
 		let lineRomanBg = "";
 		let isWordByWord = false;
@@ -146,9 +119,7 @@ export function parseLyric(ttmlText: string): TTMLLyric {
 			}
 		}
 
-		if (isWordByWord) {
-			itunesWordRomanizations.set(key, { main: mainWords, bg: bgWords });
-		}
+		const wordData = isWordByWord ? { main: mainWords, bg: bgWords } : null;
 
 		lineRomanMain = lineRomanMain.trim();
 		lineRomanBg = lineRomanBg
@@ -157,13 +128,143 @@ export function parseLyric(ttmlText: string): TTMLLyric {
 			.replace(/[)）]$/, "")
 			.trim();
 
-		if (lineRomanMain.length > 0 || lineRomanBg.length > 0) {
-			itunesLineRomanizations.set(key, {
-				main: lineRomanMain,
-				bg: lineRomanBg,
-			});
+		const lineData =
+			lineRomanMain.length > 0 || lineRomanBg.length > 0
+				? { main: lineRomanMain, bg: lineRomanBg }
+				: null;
+
+		return { lineData, wordData };
+	};
+
+	const itunesTranslations = new Map<string, LineMetadata>();
+	const translationTextElements = ttmlDoc.querySelectorAll(
+		"iTunesMetadata > translations > translation > text[for]",
+	);
+
+	translationTextElements.forEach((textEl) => {
+		const key = textEl.getAttribute("for");
+		if (!key) return;
+		const parsed = parseTranslationTextElement(textEl);
+		if (parsed) {
+			itunesTranslations.set(key, parsed);
 		}
 	});
+
+	const itunesTranslationsByLang = new Map<string, Map<string, LineMetadata>>();
+	const itunesTimedTranslationsByLang = new Map<
+		string,
+		Map<string, LineMetadata>
+	>();
+	const translationElements = Array.from(
+		ttmlDoc.querySelectorAll("iTunesMetadata > translations > translation"),
+	);
+	const hasLangTranslation = translationElements.some(
+		(el) => (el.getAttribute("xml:lang") ?? "").trim().length > 0,
+	);
+	for (const translationEl of translationElements) {
+		const langAttr = (translationEl.getAttribute("xml:lang") ?? "").trim();
+		if (!langAttr && hasLangTranslation) continue;
+		const lang = langAttr || "und";
+		if (!itunesTranslationsByLang.has(lang)) {
+			itunesTranslationsByLang.set(lang, new Map());
+		}
+		if (!itunesTimedTranslationsByLang.has(lang)) {
+			itunesTimedTranslationsByLang.set(lang, new Map());
+		}
+		const langTranslations = itunesTranslationsByLang.get(lang);
+		const langTimedTranslations = itunesTimedTranslationsByLang.get(lang);
+		if (!langTranslations || !langTimedTranslations) continue;
+
+		for (const textEl of translationEl.querySelectorAll("text[for]")) {
+			const key = textEl.getAttribute("for");
+			if (!key) continue;
+			const parsed = parseTranslationTextElement(textEl);
+			if (!parsed) continue;
+			if (textEl.querySelector("span")) {
+				langTimedTranslations.set(key, parsed);
+				langTranslations.delete(key);
+			} else {
+				langTranslations.set(key, parsed);
+			}
+		}
+	}
+
+	const itunesLineRomanizations = new Map<string, LineMetadata>();
+	const parseVocalValue = (value: string | string[] | null | undefined) => {
+		if (!value) return [];
+		const parts = Array.isArray(value) ? value : value.split(/[\s,]+/);
+		return parts.map((v) => v.trim()).filter(Boolean);
+	};
+
+	const itunesWordRomanizations = new Map<string, WordRomanMetadata>();
+
+	const romanizationTextElements = ttmlDoc.querySelectorAll(
+		"iTunesMetadata > transliterations > transliteration > text[for]",
+	);
+
+	romanizationTextElements.forEach((textEl) => {
+		const key = textEl.getAttribute("for");
+		if (!key) return;
+		const { lineData, wordData } = parseRomanizationTextElement(textEl);
+		if (wordData) {
+			itunesWordRomanizations.set(key, wordData);
+		}
+		if (lineData) {
+			itunesLineRomanizations.set(key, lineData);
+		}
+	});
+
+	const itunesLineRomanizationsByLang = new Map<string, Map<string, LineMetadata>>();
+	const itunesWordRomanizationsByLang = new Map<
+		string,
+		Map<string, WordRomanMetadata>
+	>();
+	const transliterationElements = Array.from(
+		ttmlDoc.querySelectorAll("iTunesMetadata > transliterations > transliteration"),
+	);
+	const hasLangTransliteration = transliterationElements.some(
+		(el) => (el.getAttribute("xml:lang") ?? "").trim().length > 0,
+	);
+	const fallbackLineRomanizations = new Map<string, LineMetadata>();
+	const fallbackWordRomanizations = new Map<string, WordRomanMetadata>();
+	for (const transliterationEl of transliterationElements) {
+		const langAttr = (transliterationEl.getAttribute("xml:lang") ?? "").trim();
+		const useFallback = !langAttr;
+		if (useFallback && hasLangTransliteration) continue;
+		const lang = langAttr || "und";
+		const lineRomanMap = useFallback
+			? fallbackLineRomanizations
+			: itunesLineRomanizationsByLang.get(lang) ??
+				itunesLineRomanizationsByLang.set(lang, new Map()).get(lang);
+		const wordRomanMap = useFallback
+			? fallbackWordRomanizations
+			: itunesWordRomanizationsByLang.get(lang) ??
+				itunesWordRomanizationsByLang.set(lang, new Map()).get(lang);
+		if (!lineRomanMap || !wordRomanMap) continue;
+
+		for (const textEl of transliterationEl.querySelectorAll("text[for]")) {
+			const key = textEl.getAttribute("for");
+			if (!key) continue;
+			const { lineData, wordData } = parseRomanizationTextElement(textEl);
+			if (wordData) {
+				wordRomanMap.set(key, wordData);
+			}
+			if (lineData) {
+				lineRomanMap.set(key, lineData);
+			}
+		}
+	}
+	if (
+		!hasLangTransliteration &&
+		(fallbackWordRomanizations.size > 0 || fallbackLineRomanizations.size > 0)
+	) {
+		if (fallbackWordRomanizations.size > 0) {
+			itunesWordRomanizationsByLang.set("und", fallbackWordRomanizations);
+		}
+		if (fallbackLineRomanizations.size > 0) {
+			itunesLineRomanizationsByLang.set("und", fallbackLineRomanizations);
+		}
+	}
 
 	const itunesTimedTranslations = new Map<string, LineMetadata>();
 	const timedTranslationTextElements = ttmlDoc.querySelectorAll(
@@ -173,29 +274,9 @@ export function parseLyric(ttmlText: string): TTMLLyric {
 	timedTranslationTextElements.forEach((textEl) => {
 		const key = textEl.getAttribute("for");
 		if (!key) return;
-
-		let main = "";
-		let bg = "";
-
-		for (const node of Array.from(textEl.childNodes)) {
-			if (node.nodeType === Node.TEXT_NODE) {
-				main += node.textContent ?? "";
-			} else if (node.nodeType === Node.ELEMENT_NODE) {
-				if ((node as Element).getAttribute("ttm:role") === "x-bg") {
-					bg += node.textContent ?? "";
-				}
-			}
-		}
-
-		main = main.trim();
-		bg = bg
-			.trim()
-			.replace(/^[（(]/, "")
-			.replace(/[)）]$/, "")
-			.trim();
-
-		if ((main.length > 0 || bg.length > 0) && textEl.querySelector("span")) {
-			itunesTimedTranslations.set(key, { main, bg });
+		const parsed = parseTranslationTextElement(textEl);
+		if (parsed && textEl.querySelector("span")) {
+			itunesTimedTranslations.set(key, parsed);
 			itunesTranslations.delete(key);
 		}
 	});
@@ -334,6 +415,43 @@ export function parseLyric(ttmlText: string): TTMLLyric {
 				line.romanLyric = lineRoman?.bg ?? "";
 			} else {
 				line.romanLyric = lineRoman?.main ?? "";
+			}
+
+			const translatedLyricByLang: Record<string, string> = {};
+			for (const [lang, translations] of itunesTranslationsByLang.entries()) {
+				const timedTranslations = itunesTimedTranslationsByLang.get(lang);
+				const langTrans =
+					timedTranslations?.get(itunesKey) ?? translations.get(itunesKey);
+				if (!langTrans) continue;
+				translatedLyricByLang[lang] = isBG
+					? langTrans.bg ?? ""
+					: langTrans.main ?? "";
+			}
+			if (Object.keys(translatedLyricByLang).length > 0) {
+				line.translatedLyricByLang = translatedLyricByLang;
+			}
+
+			const romanLyricByLang: Record<string, string> = {};
+			for (const [lang, romanizations] of itunesLineRomanizationsByLang.entries()) {
+				const langRoman = romanizations.get(itunesKey);
+				if (!langRoman) continue;
+				romanLyricByLang[lang] = isBG
+					? langRoman.bg ?? ""
+					: langRoman.main ?? "";
+			}
+			if (Object.keys(romanLyricByLang).length > 0) {
+				line.romanLyricByLang = romanLyricByLang;
+			}
+
+			const wordRomanizationByLang: Record<string, TTMLRomanWord[]> = {};
+			for (const [lang, romanizations] of itunesWordRomanizationsByLang.entries()) {
+				const langRoman = romanizations.get(itunesKey);
+				const romanList = isBG ? langRoman?.bg : langRoman?.main;
+				if (!romanList || romanList.length === 0) continue;
+				wordRomanizationByLang[lang] = romanList;
+			}
+			if (Object.keys(wordRomanizationByLang).length > 0) {
+				line.wordRomanizationByLang = wordRomanizationByLang;
 			}
 		}
 

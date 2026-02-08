@@ -13,6 +13,18 @@ export const advancedSegmentationDialogAtom = atom(false);
 export const timeShiftDialogAtom = atom(false);
 export const distributeRomanizationDialogAtom = atom(false);
 export const notificationCenterDialogAtom = atom(false);
+export type AddLanguageDialogTarget =
+	| "translation"
+	| "romanization"
+	| "word-romanization";
+export const addLanguageDialogAtom = atom<{
+	open: boolean;
+	target: AddLanguageDialogTarget;
+	onSubmit?: (lang: string) => void;
+}>({
+	open: false,
+	target: "translation",
+});
 export const confirmDialogAtom = atom<{
 	open: boolean;
 	title: string;

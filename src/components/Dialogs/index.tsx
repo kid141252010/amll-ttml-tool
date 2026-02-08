@@ -12,6 +12,7 @@ import { ReviewReportDialog } from "$/modules/review/modals/ReviewReportDialog.t
 import { AdvancedSegmentationDialog } from "$/modules/segmentation/components/AdvancedSegmentation.tsx";
 import { SplitWordDialog } from "$/modules/segmentation/components/split-word.tsx";
 import { SettingsDialog } from "$/modules/settings/modals/index.tsx";
+import { AddLanguageDialog } from "./add-language.tsx";
 import { ConfirmationDialog } from "./confirmation.tsx";
 import { RiskConfirmationDialog } from "./risk-confirmation.tsx";
 import { NotificationCenterDialog } from "./notification-center.tsx";
@@ -33,6 +34,7 @@ export const Dialogs = () => {
 			<AdvancedSegmentationDialog />
 			<TimeShiftDialog />
 			<DistributeRomanizationDialog />
+			<AddLanguageDialog />
 			<NotificationCenterDialog />
 			<ReviewReportDialog />
 			<RiskConfirmationDialog />

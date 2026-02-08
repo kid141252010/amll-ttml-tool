@@ -40,6 +40,12 @@ export interface LyricWord extends AMLLLyricWord {
 	romanWarning?: boolean;
 }
 
+export interface TTMLRomanWord {
+	startTime: number;
+	endTime: number;
+	text: string;
+}
+
 export const newLyricWord = (): LyricWord => ({
 	id: uid(),
 	startTime: 0,
@@ -62,6 +68,9 @@ export interface LyricLine extends AMLLLyricLine {
 	// endTime: number;
 	ignoreSync: boolean;
 	vocal?: string[];
+	translatedLyricByLang?: Record<string, string>;
+	romanLyricByLang?: Record<string, string>;
+	wordRomanizationByLang?: Record<string, TTMLRomanWord[]>;
 }
 
 export const newLyricLine = (): LyricLine => ({

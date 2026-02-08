@@ -15,9 +15,19 @@
  * 但是可能会有信息会丢失
  */
 
-import type { LyricLine, LyricWord, TTMLLyric } from "../../../types/ttml.ts";
+import type {
+	LyricLine,
+	LyricWord,
+	TTMLLyric,
+	TTMLRomanWord,
+} from "../../../types/ttml.ts";
 import { log } from "../../../utils/logging.ts";
 import { msToTimestamp } from "../../../utils/timestamp.ts";
+
+type LineMetadata = {
+	main: string;
+	bg: string;
+};
 
 export default function exportTTMLText(
 	ttmlLyric: TTMLLyric,
@@ -58,6 +68,14 @@ export default function exportTTMLText(
 		span.setAttribute("begin", msToTimestamp(word.startTime));
 		span.setAttribute("end", msToTimestamp(word.endTime));
 		span.appendChild(doc.createTextNode(word.romanWord));
+		return span;
+	}
+
+	function createRomanizationSpanFromData(word: TTMLRomanWord): Element {
+		const span = doc.createElement("span");
+		span.setAttribute("begin", msToTimestamp(word.startTime));
+		span.setAttribute("end", msToTimestamp(word.endTime));
+		span.appendChild(doc.createTextNode(word.text));
 		return span;
 	}
 
@@ -182,6 +200,20 @@ export default function exportTTMLText(
 		string,
 		{ main: LyricWord[]; bg: LyricWord[] }
 	>();
+	const translationByLangMap = new Map<string, Map<string, LineMetadata>>();
+	const romanizationByLangMap = new Map<string, Map<string, LineMetadata>>();
+	const wordRomanizationByLangMap = new Map<
+		string,
+		Map<
+			string,
+			{
+				mainWords: LyricWord[];
+				bgWords: LyricWord[];
+				mainRoman: TTMLRomanWord[];
+				bgRoman: TTMLRomanWord[];
+			}
+		>
+	>();
 
 	const guessDuration = lyric[lyric.length - 1]?.endTime ?? 0;
 	body.setAttribute("dur", msToTimestamp(guessDuration));
@@ -241,9 +273,10 @@ export default function exportTTMLText(
 			}
 
 			const nextLine = param[lineIndex + 1];
+			let bgLine: LyricLine | undefined;
 			if (nextLine?.isBG) {
 				lineIndex++;
-				const bgLine = nextLine;
+				bgLine = nextLine;
 				bgWords = bgLine.words;
 
 				const bgLineSpan = doc.createElement("span");
@@ -330,6 +363,71 @@ export default function exportTTMLText(
 				lineP.appendChild(span);
 			}
 
+			const translationLangs = new Set<string>([
+				...Object.keys(line.translatedLyricByLang ?? {}),
+				...Object.keys(bgLine?.translatedLyricByLang ?? {}),
+			]);
+			for (const lang of translationLangs) {
+				const main = line.translatedLyricByLang?.[lang] ?? "";
+				const bg = bgLine?.translatedLyricByLang?.[lang] ?? "";
+				if (main.trim().length === 0 && bg.trim().length === 0) continue;
+				if (lang === "und") {
+					if (!line.translatedLyric && main.trim().length > 0) {
+						line.translatedLyric = main;
+					}
+					if (bgLine && !bgLine.translatedLyric && bg.trim().length > 0) {
+						bgLine.translatedLyric = bg;
+					}
+					continue;
+				}
+				if (!translationByLangMap.has(lang)) {
+					translationByLangMap.set(lang, new Map());
+				}
+				translationByLangMap.get(lang)?.set(itunesKey, { main, bg });
+			}
+
+			const romanLangs = new Set<string>([
+				...Object.keys(line.romanLyricByLang ?? {}),
+				...Object.keys(bgLine?.romanLyricByLang ?? {}),
+			]);
+			for (const lang of romanLangs) {
+				const main = line.romanLyricByLang?.[lang] ?? "";
+				const bg = bgLine?.romanLyricByLang?.[lang] ?? "";
+				if (main.trim().length === 0 && bg.trim().length === 0) continue;
+				if (lang === "und") {
+					if (!line.romanLyric && main.trim().length > 0) {
+						line.romanLyric = main;
+					}
+					if (bgLine && !bgLine.romanLyric && bg.trim().length > 0) {
+						bgLine.romanLyric = bg;
+					}
+					continue;
+				}
+				if (!romanizationByLangMap.has(lang)) {
+					romanizationByLangMap.set(lang, new Map());
+				}
+				romanizationByLangMap.get(lang)?.set(itunesKey, { main, bg });
+			}
+
+			const wordRomanLangs = new Set<string>([
+				...Object.keys(line.wordRomanizationByLang ?? {}),
+				...Object.keys(bgLine?.wordRomanizationByLang ?? {}),
+			]);
+			for (const lang of wordRomanLangs) {
+				const mainRoman = line.wordRomanizationByLang?.[lang] ?? [];
+				const bgRoman = bgLine?.wordRomanizationByLang?.[lang] ?? [];
+				if (mainRoman.length === 0 && bgRoman.length === 0) continue;
+				if (!wordRomanizationByLangMap.has(lang)) {
+					wordRomanizationByLangMap.set(lang, new Map());
+				}
+				wordRomanizationByLangMap.get(lang)?.set(itunesKey, {
+					mainWords,
+					bgWords,
+					mainRoman,
+					bgRoman,
+				});
+			}
+
 			const hasRoman =
 				mainWords.some((w) => w.romanWord && w.romanWord.trim().length > 0) ||
 				bgWords.some((w) => w.romanWord && w.romanWord.trim().length > 0);
@@ -344,7 +442,42 @@ export default function exportTTMLText(
 		body.appendChild(paramDiv);
 	}
 
-	if (romanizationMap.size > 0) {
+	if (translationByLangMap.size > 0) {
+		const itunesMeta = doc.createElement("iTunesMetadata");
+		itunesMeta.setAttribute(
+			"xmlns",
+			"http://music.apple.com/lyric-ttml-internal",
+		);
+
+		const translations = doc.createElement("translations");
+		for (const [lang, entries] of translationByLangMap.entries()) {
+			const translation = doc.createElement("translation");
+			translation.setAttribute("xml:lang", lang);
+			for (const [key, { main, bg }] of entries.entries()) {
+				const textEl = doc.createElement("text");
+				textEl.setAttribute("for", key);
+				if (main.trim().length > 0) {
+					textEl.appendChild(doc.createTextNode(main));
+				}
+				if (bg.trim().length > 0) {
+					const bgSpan = doc.createElement("span");
+					bgSpan.setAttribute("ttm:role", "x-bg");
+					bgSpan.appendChild(doc.createTextNode(bg));
+					textEl.appendChild(bgSpan);
+				}
+				translation.appendChild(textEl);
+			}
+			translations.appendChild(translation);
+		}
+
+		itunesMeta.appendChild(translations);
+		metadataEl.appendChild(itunesMeta);
+	}
+
+	const hasMultiLangTransliteration =
+		romanizationByLangMap.size > 0 || wordRomanizationByLangMap.size > 0;
+
+	if (romanizationMap.size > 0 || hasMultiLangTransliteration) {
 		const itunesMeta = doc.createElement("iTunesMetadata");
 		itunesMeta.setAttribute(
 			"xmlns",
@@ -352,63 +485,214 @@ export default function exportTTMLText(
 		);
 
 		const transliterations = doc.createElement("transliterations");
-		const transliteration = doc.createElement("transliteration");
+		const defaultTransliteration = doc.createElement("transliteration");
+		let hasDefaultTransliteration = false;
+		if (romanizationMap.size > 0) {
+			for (const [key, { main, bg }] of romanizationMap.entries()) {
+				const textEl = doc.createElement("text");
+				textEl.setAttribute("for", key);
 
-		for (const [key, { main, bg }] of romanizationMap.entries()) {
-			const textEl = doc.createElement("text");
-			textEl.setAttribute("for", key);
-
-			for (const word of main) {
-				if (word.romanWord && word.romanWord.trim().length > 0) {
-					textEl.appendChild(createRomanizationSpan(word));
-				} else if (word.word.trim().length === 0 && textEl.hasChildNodes()) {
-					textEl.appendChild(doc.createTextNode(word.word));
+				for (const word of main) {
+					if (word.romanWord && word.romanWord.trim().length > 0) {
+						textEl.appendChild(createRomanizationSpan(word));
+					} else if (word.word.trim().length === 0 && textEl.hasChildNodes()) {
+						textEl.appendChild(doc.createTextNode(word.word));
+					}
 				}
-			}
 
-			const hasBgRoman = bg.some(
-				(w) => w.romanWord && w.romanWord.trim().length > 0,
-			);
-			if (hasBgRoman) {
-				const bgSpan = doc.createElement("span");
-				bgSpan.setAttribute("ttm:role", "x-bg");
-
-				const romanBgWords = bg.filter(
+				const hasBgRoman = bg.some(
 					(w) => w.romanWord && w.romanWord.trim().length > 0,
 				);
+				if (hasBgRoman) {
+					const bgSpan = doc.createElement("span");
+					bgSpan.setAttribute("ttm:role", "x-bg");
 
-				for (let wordIndex = 0; wordIndex < romanBgWords.length; wordIndex++) {
-					const word = romanBgWords[wordIndex];
-					const span = createRomanizationSpan(word);
+					const romanBgWords = bg.filter(
+						(w) => w.romanWord && w.romanWord.trim().length > 0,
+					);
 
-					if (wordIndex === 0 && span.firstChild) {
-						span.firstChild.nodeValue = `(${span.firstChild.nodeValue}`;
-					}
-					if (wordIndex === romanBgWords.length - 1 && span.firstChild) {
-						span.firstChild.nodeValue = `${span.firstChild.nodeValue})`;
-					}
+					for (
+						let wordIndex = 0;
+						wordIndex < romanBgWords.length;
+						wordIndex++
+					) {
+						const word = romanBgWords[wordIndex];
+						const span = createRomanizationSpan(word);
 
-					bgSpan.appendChild(span);
+						if (wordIndex === 0 && span.firstChild) {
+							span.firstChild.nodeValue = `(${span.firstChild.nodeValue}`;
+						}
+						if (wordIndex === romanBgWords.length - 1 && span.firstChild) {
+							span.firstChild.nodeValue = `${span.firstChild.nodeValue})`;
+						}
 
-					const originalIndex = bg.indexOf(word);
-					if (originalIndex > -1 && originalIndex < bg.length - 1) {
-						const nextWord = bg[originalIndex + 1];
-						if (nextWord && nextWord.word.trim().length === 0) {
-							bgSpan.appendChild(doc.createTextNode(nextWord.word));
+						bgSpan.appendChild(span);
+
+						const originalIndex = bg.indexOf(word);
+						if (originalIndex > -1 && originalIndex < bg.length - 1) {
+							const nextWord = bg[originalIndex + 1];
+							if (nextWord && nextWord.word.trim().length === 0) {
+								bgSpan.appendChild(doc.createTextNode(nextWord.word));
+							}
 						}
 					}
+					textEl.appendChild(bgSpan);
 				}
-				textEl.appendChild(bgSpan);
-			}
 
-			transliteration.appendChild(textEl);
+				defaultTransliteration.appendChild(textEl);
+			}
+			hasDefaultTransliteration = true;
 		}
 
-		transliterations.appendChild(transliteration);
+		const undEntries = wordRomanizationByLangMap.get("und");
+		if (undEntries) {
+			for (const [key, data] of undEntries.entries()) {
+				const textEl = doc.createElement("text");
+				textEl.setAttribute("for", key);
+
+				if (data.mainRoman.length > 0) {
+					for (const word of data.mainWords) {
+						if (word.word.trim().length === 0) {
+							if (textEl.hasChildNodes()) {
+								textEl.appendChild(doc.createTextNode(word.word));
+							}
+							continue;
+						}
+						const match = data.mainRoman.find(
+							(r) => r.startTime === word.startTime && r.endTime === word.endTime,
+						);
+						if (!match || match.text.trim().length === 0) continue;
+						textEl.appendChild(createRomanizationSpanFromData(match));
+					}
+				}
+
+				if (data.bgRoman.length > 0) {
+					const bgSpan = doc.createElement("span");
+					bgSpan.setAttribute("ttm:role", "x-bg");
+					const bgSpans: Element[] = [];
+					for (const word of data.bgWords) {
+						if (word.word.trim().length === 0) {
+							if (bgSpan.hasChildNodes()) {
+								bgSpan.appendChild(doc.createTextNode(word.word));
+							}
+							continue;
+						}
+						const match = data.bgRoman.find(
+							(r) => r.startTime === word.startTime && r.endTime === word.endTime,
+						);
+						if (!match || match.text.trim().length === 0) continue;
+						const span = createRomanizationSpanFromData(match);
+						bgSpan.appendChild(span);
+						bgSpans.push(span);
+					}
+					if (bgSpans.length > 0) {
+						const first = bgSpans[0];
+						const last = bgSpans[bgSpans.length - 1];
+						if (first.firstChild) {
+							first.firstChild.nodeValue = `(${first.firstChild.nodeValue}`;
+						}
+						if (last.firstChild) {
+							last.firstChild.nodeValue = `${last.firstChild.nodeValue})`;
+						}
+						textEl.appendChild(bgSpan);
+					}
+				}
+
+				defaultTransliteration.appendChild(textEl);
+			}
+			hasDefaultTransliteration = true;
+		}
+
+		if (hasDefaultTransliteration) {
+			transliterations.appendChild(defaultTransliteration);
+		}
+
+		for (const [lang, entries] of wordRomanizationByLangMap.entries()) {
+			if (lang === "und") continue;
+			const transliteration = doc.createElement("transliteration");
+			transliteration.setAttribute("xml:lang", lang);
+			for (const [key, data] of entries.entries()) {
+				const textEl = doc.createElement("text");
+				textEl.setAttribute("for", key);
+
+				if (data.mainRoman.length > 0) {
+					for (const word of data.mainWords) {
+						if (word.word.trim().length === 0) {
+							if (textEl.hasChildNodes()) {
+								textEl.appendChild(doc.createTextNode(word.word));
+							}
+							continue;
+						}
+						const match = data.mainRoman.find(
+							(r) => r.startTime === word.startTime && r.endTime === word.endTime,
+						);
+						if (!match || match.text.trim().length === 0) continue;
+						textEl.appendChild(createRomanizationSpanFromData(match));
+					}
+				}
+
+				if (data.bgRoman.length > 0) {
+					const bgSpan = doc.createElement("span");
+					bgSpan.setAttribute("ttm:role", "x-bg");
+					const bgSpans: Element[] = [];
+					for (const word of data.bgWords) {
+						if (word.word.trim().length === 0) {
+							if (bgSpan.hasChildNodes()) {
+								bgSpan.appendChild(doc.createTextNode(word.word));
+							}
+							continue;
+						}
+						const match = data.bgRoman.find(
+							(r) => r.startTime === word.startTime && r.endTime === word.endTime,
+						);
+						if (!match || match.text.trim().length === 0) continue;
+						const span = createRomanizationSpanFromData(match);
+						bgSpan.appendChild(span);
+						bgSpans.push(span);
+					}
+					if (bgSpans.length > 0) {
+						const first = bgSpans[0];
+						const last = bgSpans[bgSpans.length - 1];
+						if (first.firstChild) {
+							first.firstChild.nodeValue = `(${first.firstChild.nodeValue}`;
+						}
+						if (last.firstChild) {
+							last.firstChild.nodeValue = `${last.firstChild.nodeValue})`;
+						}
+						textEl.appendChild(bgSpan);
+					}
+				}
+
+				transliteration.appendChild(textEl);
+			}
+			transliterations.appendChild(transliteration);
+		}
+
+		for (const [lang, entries] of romanizationByLangMap.entries()) {
+			if (wordRomanizationByLangMap.has(lang)) continue;
+			const transliteration = doc.createElement("transliteration");
+			transliteration.setAttribute("xml:lang", lang);
+			for (const [key, { main, bg }] of entries.entries()) {
+				const textEl = doc.createElement("text");
+				textEl.setAttribute("for", key);
+				if (main.trim().length > 0) {
+					textEl.appendChild(doc.createTextNode(main));
+				}
+				if (bg.trim().length > 0) {
+					const bgSpan = doc.createElement("span");
+					bgSpan.setAttribute("ttm:role", "x-bg");
+					bgSpan.appendChild(doc.createTextNode(bg));
+					textEl.appendChild(bgSpan);
+				}
+				transliteration.appendChild(textEl);
+			}
+			transliterations.appendChild(transliteration);
+		}
 		itunesMeta.appendChild(transliterations);
 
 		metadataEl.appendChild(itunesMeta);
 	}
+
 
 	ttRoot.appendChild(body);
 	log("ttml document built", ttRoot);
