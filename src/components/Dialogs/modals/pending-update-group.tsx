@@ -86,7 +86,7 @@ export const PendingUpdateGroup = ({
 								</Flex>
 							</Flex>
 						</Flex>
-						<Flex direction="column" align="end" gap="2">
+					<Flex direction="column" align="end" gap="2" style={notificationCenterStyles.actionColumn}>
 							<Text size="1" color="gray" wrap="nowrap">
 								{latestCreatedAt ? formatTime(latestCreatedAt) : ""}
 							</Text>

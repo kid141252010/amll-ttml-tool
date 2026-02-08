@@ -25,6 +25,9 @@ export const notificationCenterStyles = {
 		flex: 1,
 		minWidth: 0,
 	} satisfies CSSProperties,
+	actionColumn: {
+		flexShrink: 0,
+	} satisfies CSSProperties,
 	groupListOffset: {
 		paddingLeft: "20px",
 	} satisfies CSSProperties,

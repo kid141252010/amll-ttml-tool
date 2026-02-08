@@ -125,7 +125,7 @@ export const NotificationEntry = ({
 							</Text>
 						)}
 					</Flex>
-					<Flex direction="column" align="end" gap="2">
+					<Flex direction="column" align="end" gap="2" style={notificationCenterStyles.actionColumn}>
 						<Text size="1" color="gray" wrap="nowrap">
 							{formatTime(item.createdAt)}
 						</Text>
