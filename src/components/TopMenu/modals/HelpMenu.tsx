@@ -2,24 +2,21 @@ import { Button, DropdownMenu } from "@radix-ui/themes";
 import type { CSSProperties } from "react";
 import { Toolbar } from "radix-ui";
 import { Trans, useTranslation } from "react-i18next";
+import { useTopMenuActions } from "../useTopMenuActions";
 
 type HelpMenuProps = {
 	variant: "toolbar" | "submenu";
-	onOpenGitHub: () => void;
-	onOpenWiki: () => void;
 	buttonStyle?: CSSProperties;
 };
 
-const HelpMenuItems = ({
-	onOpenGitHub,
-	onOpenWiki,
-}: Omit<HelpMenuProps, "variant" | "buttonStyle">) => {
+const HelpMenuItems = () => {
 	const { t } = useTranslation();
+	const menu = useTopMenuActions();
 
 	return (
 		<>
-			<DropdownMenu.Item onSelect={onOpenGitHub}>GitHub</DropdownMenu.Item>
-			<DropdownMenu.Item onSelect={onOpenWiki}>
+			<DropdownMenu.Item onSelect={menu.onOpenGitHub}>GitHub</DropdownMenu.Item>
+			<DropdownMenu.Item onSelect={menu.onOpenWiki}>
 				{t("topBar.menu.helpDoc", "使用说明")}
 			</DropdownMenu.Item>
 		</>
@@ -34,7 +31,7 @@ export const HelpMenu = (props: HelpMenuProps) => {
 					<Trans i18nKey="topBar.menu.help">帮助</Trans>
 				</DropdownMenu.SubTrigger>
 				<DropdownMenu.SubContent>
-					<HelpMenuItems {...props} />
+					<HelpMenuItems />
 				</DropdownMenu.SubContent>
 			</DropdownMenu.Sub>
 		);
@@ -50,7 +47,7 @@ export const HelpMenu = (props: HelpMenuProps) => {
 				</DropdownMenu.Trigger>
 			</Toolbar.Button>
 			<DropdownMenu.Content>
-				<HelpMenuItems {...props} />
+				<HelpMenuItems />
 			</DropdownMenu.Content>
 		</DropdownMenu.Root>
 	);
