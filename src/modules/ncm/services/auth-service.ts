@@ -2,6 +2,46 @@ import type { NeteaseProfile } from "$/modules/settings/states";
 import { requestNetease } from "./index";
 import type { NeteaseResponse } from "./index";
 
+const autoLoginFailureKey = "neteaseAutoLoginFailures";
+const maxAutoLoginFailures = 3;
+
+const readAutoLoginFailures = () => {
+	if (typeof localStorage === "undefined") {
+		return 0;
+	}
+	try {
+		const raw = localStorage.getItem(autoLoginFailureKey);
+		if (!raw) return 0;
+		const parsed = Number.parseInt(raw, 10);
+		return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+	} catch {
+		return 0;
+	}
+};
+
+const writeAutoLoginFailures = (value: number) => {
+	if (typeof localStorage === "undefined") {
+		return;
+	}
+	try {
+		localStorage.setItem(autoLoginFailureKey, String(value));
+	} catch {
+		return;
+	}
+};
+
+export const NeteaseAutoLoginGuard = {
+	maxFailures: maxAutoLoginFailures,
+	getFailures: () => readAutoLoginFailures(),
+	shouldAttempt: () => readAutoLoginFailures() < maxAutoLoginFailures,
+	recordFailure: () => {
+		const nextValue = readAutoLoginFailures() + 1;
+		writeAutoLoginFailures(nextValue);
+		return nextValue;
+	},
+	reset: () => writeAutoLoginFailures(0),
+};
+
 export const NeteaseAuthClient = {
 	sendCaptcha: async (phone: string, ctcode = "86") => {
 		return requestNetease<NeteaseResponse<boolean>>("/captcha/sent", {

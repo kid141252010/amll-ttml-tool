@@ -13,7 +13,7 @@ import {
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { NeteaseAuthClient } from "$/modules/ncm/services";
+import { NeteaseAuthClient, NeteaseAutoLoginGuard } from "$/modules/ncm/services";
 import {
 	githubAmlldbAccessAtom,
 	neteaseCookieAtom,
@@ -34,6 +34,9 @@ export const NeteaseLoginCard = () => {
 	const [neteaseCountdown, setNeteaseCountdown] = useState(0);
 	const [neteaseLoading, setNeteaseLoading] = useState(false);
 	const [neteaseTab, setNeteaseTab] = useState("phone");
+	const [autoLoginBlocked, setAutoLoginBlocked] = useState(
+		() => !NeteaseAutoLoginGuard.shouldAttempt(),
+	);
 	const setPushNotification = useSetAtom(pushNotificationAtom);
 	const setRiskConfirmDialog = useSetAtom(riskConfirmDialogAtom);
 	const hasGithubAccess = useAtomValue(githubAmlldbAccessAtom);
@@ -55,12 +58,22 @@ export const NeteaseLoginCard = () => {
 	useEffect(() => {
 		if (!trimmedNeteaseCookie) {
 			setNeteaseUser(null);
+			NeteaseAutoLoginGuard.reset();
+			setAutoLoginBlocked(false);
+			return;
+		}
+		if (autoLoginBlocked || !NeteaseAutoLoginGuard.shouldAttempt()) {
+			if (!autoLoginBlocked) {
+				setAutoLoginBlocked(true);
+			}
 			return;
 		}
 		if (neteaseUser || neteaseLoading) return;
 		setNeteaseLoading(true);
 		NeteaseAuthClient.checkCookieStatus(trimmedNeteaseCookie)
 			.then((profile) => {
+				NeteaseAutoLoginGuard.reset();
+				setAutoLoginBlocked(false);
 				setNeteaseUser(profile);
 				setPushNotification({
 					title: t("settings.connect.netease.recovered", "网易云登录已恢复"),
@@ -69,6 +82,18 @@ export const NeteaseLoginCard = () => {
 				});
 			})
 			.catch((error) => {
+				const failureCount = NeteaseAutoLoginGuard.recordFailure();
+				if (failureCount >= NeteaseAutoLoginGuard.maxFailures) {
+					setAutoLoginBlocked(true);
+					setPushNotification({
+						title: t(
+							"settings.connect.netease.autoLoginPaused",
+							"自动登录失败次数过多，已暂停自动尝试",
+						),
+						level: "warning",
+						source: "ncm",
+					});
+				}
 				setNeteaseUser(null);
 				setPushNotification({
 					title: t(
@@ -92,6 +117,7 @@ export const NeteaseLoginCard = () => {
 		setPushNotification,
 		t,
 		trimmedNeteaseCookie,
+		autoLoginBlocked,
 	]);
 
 	useEffect(() => {
@@ -174,6 +200,8 @@ export const NeteaseLoginCard = () => {
 			setNeteaseLoading(true);
 			try {
 				const result = await NeteaseAuthClient.loginByPhone(phone, captcha);
+				NeteaseAutoLoginGuard.reset();
+				setAutoLoginBlocked(false);
 				setNeteaseCookie(result.cookie);
 				setNeteaseUser(result.profile);
 				setNeteasePhone("");
@@ -228,6 +256,8 @@ export const NeteaseLoginCard = () => {
 			setNeteaseLoading(true);
 			try {
 				const profile = await NeteaseAuthClient.checkCookieStatus(cookie);
+				NeteaseAutoLoginGuard.reset();
+				setAutoLoginBlocked(false);
 				setNeteaseCookie(cookie);
 				setNeteaseUser(profile);
 				setNeteaseCookieInput("");
@@ -269,6 +299,8 @@ export const NeteaseLoginCard = () => {
 
 	const handleNeteaseLogout = useCallback(() => {
 		setNeteaseCookie("");
+		NeteaseAutoLoginGuard.reset();
+		setAutoLoginBlocked(false);
 		setNeteaseUser(null);
 		setNeteasePhone("");
 		setNeteaseCaptcha("");

@@ -47,5 +47,5 @@ export const requestNetease = async <T,>(
 	return data as T;
 };
 
-export { NeteaseAuthClient } from "./auth-service";
+export { NeteaseAuthClient, NeteaseAutoLoginGuard } from "./auth-service";
 export { cacheNeteaseAudioToIndexedDb, loadNeteaseAudio } from "./audio-service";
