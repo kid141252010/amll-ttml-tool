@@ -2,6 +2,7 @@ import type { LyricLine, LyricWord, TTMLLyric } from "$/types/ttml";
 
 type WordChange = {
 	lineNumber: number;
+	isBG: boolean;
 	oldWord: string;
 	newWord: string;
 	oldRoman: string;
@@ -10,6 +11,7 @@ type WordChange = {
 
 type LineChange = {
 	lineNumber: number;
+	isBG: boolean;
 	oldTrans: string;
 	newTrans: string;
 	oldRoman: string;
@@ -19,6 +21,7 @@ type LineChange = {
 export type SyncChangeCandidate = {
 	wordId: string;
 	lineNumber: number;
+	isBG: boolean;
 	word: string;
 	oldStart: number;
 	newStart: number;
@@ -26,7 +29,7 @@ export type SyncChangeCandidate = {
 	newEnd: number;
 };
 
-export type TimeAxisStashItem = {
+export type TimingStashItem = {
 	wordId: string;
 	field: "startTime" | "endTime";
 };
@@ -69,6 +72,26 @@ const getLineNumber = (
 };
 
 const wrap = (value: string | number) => `\`${value}\``;
+const formatLineLabel = (lineNumber: number, isBG?: boolean) =>
+	`第 ${lineNumber} 行${isBG ? "（背景）" : ""}`;
+const formatLineLabelList = (
+	items: Array<{ lineNumber: number; isBG?: boolean }>,
+) => {
+	const seen = new Set<string>();
+	const list = items
+		.filter((item) => {
+			const key = `${item.lineNumber}:${item.isBG ? "bg" : "main"}`;
+			if (seen.has(key)) return false;
+			seen.add(key);
+			return true;
+		})
+		.sort(
+			(a, b) =>
+				a.lineNumber - b.lineNumber ||
+				Number(a.isBG) - Number(b.isBG),
+		);
+	return list.map((item) => formatLineLabel(item.lineNumber, item.isBG)).join("、");
+};
 
 export const formatReport = (items: string[]) => {
 	if (items.length === 0) return "未检测到差异。";
@@ -105,6 +128,7 @@ export const buildEditReport = (freeze: TTMLLyric, staged: TTMLLyric) => {
 			freezeDisplayMap,
 			stagedDisplayMap,
 		);
+		const isBG = freezeLine.isBG ?? stagedLine.isBG ?? false;
 		const oldTrans = freezeLine.translatedLyric ?? "";
 		const newTrans = stagedLine.translatedLyric ?? "";
 		const oldLineRoman = freezeLine.romanLyric ?? "";
@@ -112,6 +136,7 @@ export const buildEditReport = (freeze: TTMLLyric, staged: TTMLLyric) => {
 		if (oldTrans !== newTrans || oldLineRoman !== newLineRoman) {
 			lineChanges.push({
 				lineNumber,
+				isBG,
 				oldTrans,
 				newTrans,
 				oldRoman: oldLineRoman,
@@ -130,6 +155,7 @@ export const buildEditReport = (freeze: TTMLLyric, staged: TTMLLyric) => {
 			if (oldWord !== newWord && oldRoman !== newRoman) {
 				wordAndRomanChanges.push({
 					lineNumber,
+					isBG,
 					oldWord,
 					newWord,
 					oldRoman,
@@ -138,6 +164,7 @@ export const buildEditReport = (freeze: TTMLLyric, staged: TTMLLyric) => {
 			} else if (oldWord !== newWord) {
 				wordTextChanges.push({
 					lineNumber,
+					isBG,
 					oldWord,
 					newWord,
 					oldRoman,
@@ -146,6 +173,7 @@ export const buildEditReport = (freeze: TTMLLyric, staged: TTMLLyric) => {
 			} else if (oldRoman !== newRoman) {
 				romanOnlyChanges.push({
 					lineNumber,
+					isBG,
 					oldWord,
 					newWord,
 					oldRoman,
@@ -165,12 +193,13 @@ export const buildEditReport = (freeze: TTMLLyric, staged: TTMLLyric) => {
 	});
 	const consumed = new Set<WordChange>();
 	for (const group of groupedByWord.values()) {
-		const lineNumbers = Array.from(new Set(group.map((item) => item.lineNumber)));
-		if (lineNumbers.length <= 1) continue;
-		lineNumbers.sort((a, b) => a - b);
+		const lineKeys = new Set(
+			group.map((item) => `${item.lineNumber}:${item.isBG ? "bg" : "main"}`),
+		);
+		if (lineKeys.size <= 1) continue;
 		const sample = group[0];
 		reportLines.push(
-			`第 ${lineNumbers.join("、")} 行：${wrap(sample.oldWord)} 存在错误，应为 ${wrap(
+			`${formatLineLabelList(group)}：${wrap(sample.oldWord)} 存在错误，应为 ${wrap(
 				sample.newWord,
 			)}`,
 		);
@@ -180,51 +209,71 @@ export const buildEditReport = (freeze: TTMLLyric, staged: TTMLLyric) => {
 	}
 
 	const remainingWordChanges = wordTextChanges.filter((item) => !consumed.has(item));
-	const groupByLine = new Map<number, WordChange[]>();
+	const groupByLine = new Map<
+		string,
+		{ lineNumber: number; isBG: boolean; items: WordChange[] }
+	>();
 	remainingWordChanges.forEach((item) => {
-		const list = groupByLine.get(item.lineNumber) ?? [];
-		list.push(item);
-		groupByLine.set(item.lineNumber, list);
+		const key = `${item.lineNumber}:${item.isBG ? "bg" : "main"}`;
+		const entry = groupByLine.get(key) ?? {
+			lineNumber: item.lineNumber,
+			isBG: item.isBG,
+			items: [],
+		};
+		entry.items.push(item);
+		groupByLine.set(key, entry);
 	});
-	const lineNumbers = Array.from(groupByLine.keys()).sort((a, b) => a - b);
-	lineNumbers.forEach((lineNumber) => {
-		const list = groupByLine.get(lineNumber) ?? [];
-		if (list.length <= 1) return;
-		const oldWords = list.map((item) => item.oldWord);
-		const newWords = list.map((item) => item.newWord);
+	const groupedLines = Array.from(groupByLine.values()).sort(
+		(a, b) =>
+			a.lineNumber - b.lineNumber || Number(a.isBG) - Number(b.isBG),
+	);
+	groupedLines.forEach((entry) => {
+		if (entry.items.length <= 1) return;
+		const oldWords = entry.items.map((item) => item.oldWord);
+		const newWords = entry.items.map((item) => item.newWord);
 		reportLines.push(
-			`第 ${lineNumber} 行：${oldWords.map(wrap).join("、")} 分别存在错误，应为 ${newWords
+			`${formatLineLabel(entry.lineNumber, entry.isBG)}：${oldWords
 				.map(wrap)
-				.join("、")}`,
+				.join("、")} 分别存在错误，应为 ${newWords.map(wrap).join("、")}`,
 		);
-		list.forEach((item) => {
+		entry.items.forEach((item) => {
 			consumed.add(item);
 		});
 	});
 
 	const singleWordChanges = remainingWordChanges.filter((item) => !consumed.has(item));
 	singleWordChanges
-		.sort((a, b) => a.lineNumber - b.lineNumber)
+		.sort(
+			(a, b) => a.lineNumber - b.lineNumber || Number(a.isBG) - Number(b.isBG),
+		)
 		.forEach((item) => {
 			reportLines.push(
-				`第 ${item.lineNumber} 行：${wrap(item.oldWord)} 存在错误，应为 ${wrap(
+				`${formatLineLabel(item.lineNumber, item.isBG)}：${wrap(
+					item.oldWord,
+				)} 存在错误，应为 ${wrap(
 					item.newWord,
 				)}`,
 			);
 		});
 
 	romanOnlyChanges
-		.sort((a, b) => a.lineNumber - b.lineNumber)
+		.sort(
+			(a, b) => a.lineNumber - b.lineNumber || Number(a.isBG) - Number(b.isBG),
+		)
 		.forEach((item) => {
 			reportLines.push(
-				`第 ${item.lineNumber} 行：${wrap(item.oldWord)} 音译 ${wrap(
+				`${formatLineLabel(item.lineNumber, item.isBG)}：${wrap(
+					item.oldWord,
+				)} 音译 ${wrap(
 					item.oldRoman,
 				)} 存在错误，应为 ${wrap(item.newRoman)}`,
 			);
 		});
 
 	lineChanges
-		.sort((a, b) => a.lineNumber - b.lineNumber)
+		.sort(
+			(a, b) => a.lineNumber - b.lineNumber || Number(a.isBG) - Number(b.isBG),
+		)
 		.forEach((item) => {
 			const parts: string[] = [];
 			if (item.oldTrans !== item.newTrans) {
@@ -238,18 +287,24 @@ export const buildEditReport = (freeze: TTMLLyric, staged: TTMLLyric) => {
 				);
 			}
 			if (parts.length > 0) {
-				reportLines.push(`第 ${item.lineNumber} 行：${parts.join("，")}`);
+				reportLines.push(
+					`${formatLineLabel(item.lineNumber, item.isBG)}：${parts.join("，")}`,
+				);
 			}
 		});
 
 	wordAndRomanChanges
-		.sort((a, b) => a.lineNumber - b.lineNumber)
+		.sort(
+			(a, b) => a.lineNumber - b.lineNumber || Number(a.isBG) - Number(b.isBG),
+		)
 		.forEach((item) => {
 			const parts = [
 				`${wrap(item.oldWord)} 存在错误，应为 ${wrap(item.newWord)}`,
 				`音译 ${wrap(item.oldRoman)} 存在错误，应为 ${wrap(item.newRoman)}`,
 			];
-			reportLines.push(`第 ${item.lineNumber} 行：${parts.join("，")}`);
+			reportLines.push(
+				`${formatLineLabel(item.lineNumber, item.isBG)}：${parts.join("，")}`,
+			);
 		});
 
 	return formatReport(reportLines);
@@ -270,6 +325,7 @@ export const buildSyncChanges = (freeze: TTMLLyric, staged: TTMLLyric) => {
 			freezeDisplayMap,
 			stagedDisplayMap,
 		);
+		const isBG = freezeLine.isBG ?? stagedLine.isBG ?? false;
 		const stagedWordMap = buildWordMap(stagedLine.words);
 		freezeLine.words.forEach((freezeWord, wordIndex) => {
 			const stagedWord =
@@ -283,6 +339,7 @@ export const buildSyncChanges = (freeze: TTMLLyric, staged: TTMLLyric) => {
 			reportLines.push({
 				wordId: freezeWord.id,
 				lineNumber,
+				isBG,
 				word: freezeWord.word || "（空白）",
 				oldStart,
 				newStart,
@@ -297,15 +354,24 @@ export const buildSyncChanges = (freeze: TTMLLyric, staged: TTMLLyric) => {
 
 export const buildSyncReport = (reportLines: SyncChangeCandidate[]) => {
 	const sentences = reportLines
-		.sort((a, b) => a.lineNumber - b.lineNumber)
+		.sort(
+			(a, b) => a.lineNumber - b.lineNumber || Number(a.isBG) - Number(b.isBG),
+		)
 		.map((item) => {
 			const startDelta = item.newStart - item.oldStart;
 			const endDelta = item.newEnd - item.oldEnd;
-			const delta = startDelta !== 0 ? startDelta : endDelta;
-			const speed = delta < 0 ? "延后" :"提前";
-			return `第 ${item.lineNumber} 行：${wrap(item.word)} ${speed}了 ${wrap(
-				Math.abs(delta),
-			)} 毫秒`;
+			const parts: string[] = [];
+			if (startDelta !== 0) {
+				const speed = startDelta < 0 ? "延后" : "提前";
+				parts.push(`起始${speed}了 ${wrap(Math.abs(startDelta))} 毫秒`);
+			}
+			if (endDelta !== 0) {
+				const speed = endDelta < 0 ? "延后" : "提前";
+				parts.push(`结束${speed}了 ${wrap(Math.abs(endDelta))} 毫秒`);
+			}
+			return `${formatLineLabel(item.lineNumber, item.isBG)}：${wrap(
+				item.word,
+			)} ${parts.join("，")}`;
 		})
 		.filter((item): item is string => Boolean(item));
 
@@ -314,13 +380,13 @@ export const buildSyncReport = (reportLines: SyncChangeCandidate[]) => {
 
 export const buildSyncReportFromStash = (
 	candidates: SyncChangeCandidate[],
-	stash: TimeAxisStashItem[],
+	stash: TimingStashItem[],
 ) => {
 	const candidateMap = new Map<string, SyncChangeCandidate>();
 	for (const item of candidates) {
 		candidateMap.set(item.wordId, item);
 	}
-	const fieldMap = new Map<string, Set<TimeAxisStashItem["field"]>>();
+	const fieldMap = new Map<string, Set<TimingStashItem["field"]>>();
 	for (const item of stash) {
 		const fields = fieldMap.get(item.wordId) ?? new Set();
 		fields.add(item.field);
@@ -350,9 +416,8 @@ export const buildSyncReportFromStash = (
 			if (parts.length === 0) return null;
 			return {
 				lineNumber: candidate.lineNumber,
-				text: `第 ${candidate.lineNumber} 行：${wrap(candidate.word)} ${parts.join(
-					"，",
-				)}`,
+				isBG: candidate.isBG,
+				detail: `${wrap(candidate.word)} ${parts.join("，")}`,
 			};
 		})
 		.filter(
@@ -360,9 +425,31 @@ export const buildSyncReportFromStash = (
 				item,
 			): item is {
 				lineNumber: number;
-				text: string;
+				isBG: boolean;
+				detail: string;
 			} => Boolean(item),
+		);
+	const lineMap = new Map<string, { lineNumber: number; isBG: boolean; list: string[] }>();
+	for (const item of items) {
+		const key = `${item.lineNumber}:${item.isBG ? "bg" : "main"}`;
+		const entry = lineMap.get(key) ?? {
+			lineNumber: item.lineNumber,
+			isBG: item.isBG,
+			list: [],
+		};
+		entry.list.push(item.detail);
+		lineMap.set(key, entry);
+	}
+	const lines = Array.from(lineMap.values())
+		.sort(
+			(a, b) =>
+				a.lineNumber - b.lineNumber || Number(a.isBG) - Number(b.isBG),
 		)
-		.sort((a, b) => a.lineNumber - b.lineNumber);
-	return formatReport(items.map((item) => item.text));
+		.map(
+			(entry) =>
+				`${formatLineLabel(entry.lineNumber, entry.isBG)}：${entry.list.join(
+					"；",
+				)}`,
+		);
+	return formatReport(lines);
 };

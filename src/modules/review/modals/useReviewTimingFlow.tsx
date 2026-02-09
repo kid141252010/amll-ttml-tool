@@ -34,7 +34,7 @@ import {
 	buildSyncReportFromStash,
 	mergeReports,
 	type SyncChangeCandidate,
-	type TimeAxisStashItem,
+	type TimingStashItem,
 } from "$/modules/review/services/report-service";
 import { fetchPullRequestDetail } from "$/modules/github/services/PR-service";
 import { parseReviewMetadata } from "$/modules/review/services/card-service";
@@ -64,14 +64,14 @@ export const useReviewTimingFlow = () => {
 	const neteaseCookie = useAtomValue(neteaseCookieAtom);
 	const { openFile } = useFileOpener();
 	const { t } = useTranslation();
-	const [timeAxisCandidates, setTimeAxisCandidates] = useState<SyncChangeCandidate[]>(
+	const [TimingCandidates, setTimingCandidates] = useState<SyncChangeCandidate[]>(
 		[],
 	);
-	const [timeAxisStashOpen, setTimeAxisStashOpen] = useState(false);
-	const [timeAxisStashItems, setTimeAxisStashItems] = useState<TimeAxisStashItem[]>(
+	const [TimingStashOpen, setTimingStashOpen] = useState(false);
+	const [TimingStashItems, setTimingStashItems] = useState<TimingStashItem[]>(
 		[],
 	);
-	const [timeAxisStashSelected, setTimeAxisStashSelected] = useState<Set<string>>(
+	const [TimingStashSelected, setTimingStashSelected] = useState<Set<string>>(
 		new Set(),
 	);
 	const [audioLoadPendingId, setAudioLoadPendingId] = useState<string | null>(
@@ -86,21 +86,21 @@ export const useReviewTimingFlow = () => {
 		null,
 	);
 
-	const timeAxisCandidateMap = useMemo(() => {
+	const TimingCandidateMap = useMemo(() => {
 		const map = new Map<string, SyncChangeCandidate>();
-		timeAxisCandidates.forEach((item) => {
+		TimingCandidates.forEach((item) => {
 			map.set(item.wordId, item);
 		});
 		return map;
-	}, [timeAxisCandidates]);
+	}, [TimingCandidates]);
 
-	const timeAxisStashGroups = useMemo(() => {
+	const TimingStashGroups = useMemo(() => {
 		const grouped = new Map<
 			number,
 			Array<{ label: string; field: string; wordId: string }>
 		>();
-		timeAxisStashItems.forEach((stashItem) => {
-			const candidate = timeAxisCandidateMap.get(stashItem.wordId);
+		TimingStashItems.forEach((stashItem) => {
+			const candidate = TimingCandidateMap.get(stashItem.wordId);
 			if (!candidate) return;
 			const list = grouped.get(candidate.lineNumber) ?? [];
 			list.push({
@@ -111,9 +111,9 @@ export const useReviewTimingFlow = () => {
 			grouped.set(candidate.lineNumber, list);
 		});
 		return Array.from(grouped.entries()).sort((a, b) => a[0] - b[0]);
-	}, [timeAxisCandidateMap, timeAxisStashItems]);
+	}, [TimingCandidateMap, TimingStashItems]);
 
-	const timeAxisOrderMap = useMemo(() => {
+	const TimingOrderMap = useMemo(() => {
 		const source = reviewFreeze?.data ?? lyricLines;
 		const map = new Map<string, number>();
 		let orderIndex = 0;
@@ -138,13 +138,13 @@ export const useReviewTimingFlow = () => {
 			label: string;
 			orderIndex: number;
 		}> = [];
-		for (const [lineNumber, groupItems] of timeAxisStashGroups) {
+		for (const [lineNumber, groupItems] of TimingStashGroups) {
 			for (const gi of groupItems) {
 				items.push({
 					lineNumber,
 					wordId: gi.wordId,
 					label: gi.label,
-					orderIndex: timeAxisOrderMap.get(gi.wordId) ?? Number.MAX_SAFE_INTEGER,
+					orderIndex: TimingOrderMap.get(gi.wordId) ?? Number.MAX_SAFE_INTEGER,
 				});
 			}
 		}
@@ -156,9 +156,9 @@ export const useReviewTimingFlow = () => {
 				return true;
 			})
 			.sort((a, b) => a.orderIndex - b.orderIndex);
-	}, [timeAxisOrderMap, timeAxisStashGroups]);
+	}, [TimingOrderMap, TimingStashGroups]);
 
-	const timeAxisStashCards = useMemo(() => {
+	const TimingStashCards = useMemo(() => {
 		const cards: Array<{
 			lines: number[];
 			items: Array<{ label: string; wordId: string }>;
@@ -195,10 +195,10 @@ export const useReviewTimingFlow = () => {
 	}, [displayItems]);
 
 	useEffect(() => {
-		if (!stashKey || !timeAxisStashOpen) return;
+		if (!stashKey || !TimingStashOpen) return;
 		const lastSelection = reviewStashLastSelection[stashKey] ?? [];
 		if (lastSelection.length === 0) return;
-		setTimeAxisStashSelected((prev) => {
+		setTimingStashSelected((prev) => {
 			if (
 				prev.size === lastSelection.length &&
 				lastSelection.every((id) => prev.has(id))
@@ -207,23 +207,23 @@ export const useReviewTimingFlow = () => {
 			}
 			return new Set(lastSelection);
 		});
-	}, [reviewStashLastSelection, stashKey, timeAxisStashOpen]);
+	}, [reviewStashLastSelection, stashKey, TimingStashOpen]);
 
 	useEffect(() => {
 		if (!reviewSession || !reviewFreeze) {
-			setTimeAxisCandidates([]);
-			setTimeAxisStashItems([]);
-			setTimeAxisStashSelected(new Set());
+			setTimingCandidates([]);
+			setTimingStashItems([]);
+			setTimingStashSelected(new Set());
 			return;
 		}
 		const freezeData = reviewFreeze.data;
 		const stagedData = reviewStaged ?? lyricLines;
 		const candidates = buildSyncChanges(freezeData, stagedData);
-		setTimeAxisCandidates(candidates);
+		setTimingCandidates(candidates);
 		const submittedSet = new Set(
 			stashKey ? reviewStashSubmitted[stashKey] ?? [] : [],
 		);
-		const nextStash: TimeAxisStashItem[] = [];
+		const nextStash: TimingStashItem[] = [];
 		for (const candidate of candidates) {
 			if (submittedSet.has(candidate.wordId)) continue;
 			const startDelta = candidate.newStart - candidate.oldStart;
@@ -235,7 +235,7 @@ export const useReviewTimingFlow = () => {
 				nextStash.push({ wordId: candidate.wordId, field: "endTime" });
 			}
 		}
-		setTimeAxisStashItems(nextStash);
+		setTimingStashItems(nextStash);
 	}, [
 		lyricLines,
 		reviewFreeze,
@@ -246,22 +246,22 @@ export const useReviewTimingFlow = () => {
 	]);
 
 	useEffect(() => {
-		if (!stashKey || !timeAxisStashOpen) return;
-		if (!timeAxisStashSelected.size) return;
+		if (!stashKey || !TimingStashOpen) return;
+		if (!TimingStashSelected.size) return;
 		setReviewStashLastSelection((prev) => ({
 			...prev,
-			[stashKey]: Array.from(timeAxisStashSelected),
+			[stashKey]: Array.from(TimingStashSelected),
 		}));
 	}, [
 		setReviewStashLastSelection,
 		stashKey,
-		timeAxisStashOpen,
-		timeAxisStashSelected,
+		TimingStashOpen,
+		TimingStashSelected,
 	]);
 
 	useEffect(() => {
-		const available = new Set(timeAxisStashItems.map((item) => item.wordId));
-		setTimeAxisStashSelected((prev) => {
+		const available = new Set(TimingStashItems.map((item) => item.wordId));
+		setTimingStashSelected((prev) => {
 			if (prev.size === 0) return prev;
 			let changed = false;
 			const next = new Set<string>();
@@ -275,7 +275,7 @@ export const useReviewTimingFlow = () => {
 			if (!changed && next.size === prev.size) return prev;
 			return next;
 		});
-	}, [timeAxisStashItems]);
+	}, [TimingStashItems]);
 
 	const closeNeteaseIdDialog = useCallback(() => {
 		if (neteaseIdResolveRef.current) {
@@ -398,10 +398,10 @@ export const useReviewTimingFlow = () => {
 						...prev,
 						open: false,
 					}));
-					setTimeAxisStashItems([]);
-					setTimeAxisStashOpen(false);
-					setTimeAxisCandidates([]);
-					setTimeAxisStashSelected(new Set());
+					setTimingStashItems([]);
+					setTimingStashOpen(false);
+					setTimingCandidates([]);
+					setTimingStashSelected(new Set());
 					setReviewSession(null);
 					setToolMode(canReview ? ToolMode.Review : ToolMode.Edit);
 				},
@@ -471,8 +471,8 @@ export const useReviewTimingFlow = () => {
 			if (toolMode === ToolMode.Sync) {
 				const candidates = buildSyncChanges(freezeData, stagedData);
 				const syncReport =
-					timeAxisStashItems.length > 0
-						? buildSyncReportFromStash(candidates, timeAxisStashItems)
+					TimingStashItems.length > 0
+						? buildSyncReportFromStash(candidates, TimingStashItems)
 						: buildSyncReport(candidates);
 				const report = mergeReports([editReport, syncReport]);
 				const mergedReport = mergeReports([...baseReports, report]);
@@ -488,10 +488,10 @@ export const useReviewTimingFlow = () => {
 						draftMatch?.id ||
 						null,
 				});
-				setTimeAxisStashItems([]);
-				setTimeAxisStashOpen(false);
-				setTimeAxisCandidates([]);
-				setTimeAxisStashSelected(new Set());
+				setTimingStashItems([]);
+				setTimingStashOpen(false);
+				setTimingCandidates([]);
+				setTimingStashSelected(new Set());
 			} else {
 				const report = editReport;
 				const mergedReport = mergeReports([...baseReports, report]);
@@ -523,24 +523,24 @@ export const useReviewTimingFlow = () => {
 		setReviewReportDialog,
 		setReviewSession,
 		setToolMode,
-		timeAxisStashItems,
+		TimingStashItems,
 		toolMode,
 	]);
 
 	const onReviewCancel = useCallback(() => {
 		setReviewSession(null);
-		setTimeAxisStashItems([]);
-		setTimeAxisStashOpen(false);
-		setTimeAxisCandidates([]);
+		setTimingStashItems([]);
+		setTimingStashOpen(false);
+		setTimingCandidates([]);
 	}, [setReviewSession]);
 
-	const openTimeAxisStash = useCallback(() => {
-		setTimeAxisStashOpen(true);
+	const openTimingStash = useCallback(() => {
+		setTimingStashOpen(true);
 	}, []);
 
 	const onToggleStashItem = useCallback(
 		(wordId: string) => {
-			setTimeAxisStashSelected((prev) => {
+			setTimingStashSelected((prev) => {
 				const next = new Set(prev);
 				if (next.has(wordId)) next.delete(wordId);
 				else next.add(wordId);
@@ -555,22 +555,22 @@ export const useReviewTimingFlow = () => {
 	);
 
 	const onRemoveStashSelected = useCallback(() => {
-		setTimeAxisStashItems((prev) =>
-			prev.filter((item) => !timeAxisStashSelected.has(item.wordId)),
+		setTimingStashItems((prev) =>
+			prev.filter((item) => !TimingStashSelected.has(item.wordId)),
 		);
-	}, [timeAxisStashSelected]);
+	}, [TimingStashSelected]);
 
 	const onClearStash = useCallback(() => {
-		setTimeAxisStashItems([]);
-		setTimeAxisStashSelected(new Set());
+		setTimingStashItems([]);
+		setTimingStashSelected(new Set());
 	}, []);
 
 	const onConfirmStash = useCallback(() => {
-		const selected = timeAxisStashItems.filter((item) =>
-			timeAxisStashSelected.has(item.wordId),
+		const selected = TimingStashItems.filter((item) =>
+			TimingStashSelected.has(item.wordId),
 		);
 		if (selected.length === 0) return;
-		const report = buildSyncReportFromStash(timeAxisCandidates, selected);
+		const report = buildSyncReportFromStash(TimingCandidates, selected);
 		const prNumber = reviewSession?.prNumber ?? null;
 		const prTitle = reviewSession?.prTitle ?? "";
 		const draftMatch = reviewReportDrafts.find((item) => {
@@ -595,7 +595,7 @@ export const useReviewTimingFlow = () => {
 			}));
 			setReviewStashLastSelection((prev) => ({
 				...prev,
-				[stashKey]: Array.from(timeAxisStashSelected),
+				[stashKey]: Array.from(TimingStashSelected),
 			}));
 		}
 		setReviewReportDialog({
@@ -610,9 +610,9 @@ export const useReviewTimingFlow = () => {
 				draftMatch?.id ||
 				null,
 		});
-		setTimeAxisStashItems([]);
-		setTimeAxisStashSelected(new Set());
-		setTimeAxisStashOpen(false);
+		setTimingStashItems([]);
+		setTimingStashSelected(new Set());
+		setTimingStashOpen(false);
 	}, [
 		reviewReportDialog,
 		reviewReportDrafts,
@@ -622,21 +622,21 @@ export const useReviewTimingFlow = () => {
 		setReviewStashLastSelection,
 		setReviewStashSubmitted,
 		stashKey,
-		timeAxisCandidates,
-		timeAxisStashItems,
-		timeAxisStashSelected,
+		TimingCandidates,
+		TimingStashItems,
+		TimingStashSelected,
 	]);
 
 	const dialogs = (
 		<>
 			<StashDialog
-				open={timeAxisStashOpen}
-				onOpenChange={setTimeAxisStashOpen}
-				stashCards={timeAxisStashCards}
-				selectedIds={timeAxisStashSelected}
-				stashItemsCount={timeAxisStashItems.length}
+				open={TimingStashOpen}
+				onOpenChange={setTimingStashOpen}
+				stashCards={TimingStashCards}
+				selectedIds={TimingStashSelected}
+				stashItemsCount={TimingStashItems.length}
 				onToggleItem={onToggleStashItem}
-				onClose={() => setTimeAxisStashOpen(false)}
+				onClose={() => setTimingStashOpen(false)}
 				onRemoveSelected={onRemoveStashSelected}
 				onClear={onClearStash}
 				onConfirm={onConfirmStash}
@@ -653,7 +653,7 @@ export const useReviewTimingFlow = () => {
 
 	return {
 		dialogs,
-		openTimeAxisStash,
+		openTimingStash,
 		onReviewCancel,
 		onReviewComplete,
 		onSwitchAudio,
@@ -668,7 +668,7 @@ export const useReviewTitleBar = (options?: {
 	const reviewSession = useAtomValue(reviewSessionAtom);
 	const {
 		dialogs,
-		openTimeAxisStash,
+		openTimingStash,
 		onReviewComplete,
 		onReviewCancel,
 		onSwitchAudio,
@@ -682,7 +682,7 @@ export const useReviewTitleBar = (options?: {
 			className={options?.actionGroupClassName}
 			showStash={showStash}
 			stashEnabled={Boolean(showStash)}
-			onOpenStash={openTimeAxisStash}
+			onOpenStash={openTimingStash}
 			showSwitchAudio={canReview}
 			switchAudioEnabled={switchAudioEnabled}
 			onSwitchAudio={onSwitchAudio}
