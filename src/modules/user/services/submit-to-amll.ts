@@ -1,13 +1,19 @@
-import type { TFunction } from "i18next";
-import { atom, useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
+import { atom, useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import exportTTMLText from "$/modules/project/logic/ttml-writer";
-import { hideSubmitAMLLDBWarningAtom } from "$/modules/settings/states";
-import { submitToAMLLDBDialogAtom } from "$/states/dialogs.ts";
+import {
+	githubPatAtom,
+	hideSubmitAMLLDBWarningAtom,
+} from "$/modules/settings/states";
+import { confirmDialogAtom, submitToAMLLDBDialogAtom } from "$/states/dialogs.ts";
 import { lyricLinesAtom } from "$/states/main";
 import { pushNotificationAtom } from "$/states/notifications";
 import type { TTMLMetadata } from "$/types/ttml";
+import { log } from "$/utils/logging.ts";
+import { createGithubGist } from "$/modules/github/services/gist-service";
+import { buildSubmitLyricIssueContent } from "$/modules/user/services/issue-builder";
+import { createGithubIssue } from "$/modules/github/services/issue-service";
 
 export type NameFieldKey = "artists" | "musicName" | "album" | "remark";
 export type NameFieldItem = {
@@ -67,51 +73,20 @@ const normalizeMetaValues = (metadatas: TTMLMetadata[], key: NameFieldKey) => {
 	return raw.map((value) => value.trim()).filter((value) => value.length > 0);
 };
 
-const validateMetadata = (
-	metadatas: TTMLMetadata[],
-	t: TFunction,
-): string[] => {
-	const result: string[] = [];
-	const musicName = metadatas.find((m) => m.key === "musicName");
-	if (!musicName?.value?.length) {
-		result.push(
-			t("submitToAMLLDB.validation.missingMusicName", "元数据缺少音乐名称"),
-		);
-	}
 
-	const artists = metadatas.find((m) => m.key === "artists");
-	if (!artists?.value?.length) {
-		result.push(
-			t("submitToAMLLDB.validation.missingArtists", "元数据缺少音乐作者"),
-		);
-	}
-
-	const album = metadatas.find((m) => m.key === "album");
-	if (!album?.value?.length) {
-		result.push(
-			t("submitToAMLLDB.validation.missingAlbum", "元数据缺少音乐专辑名称"),
-		);
-	}
-
-	const musicIds = [
-		metadatas.find((m) => m.key === "ncmMusicId"),
-		metadatas.find((m) => m.key === "qqMusicId"),
-		metadatas.find((m) => m.key === "spotifyId"),
-		metadatas.find((m) => m.key === "appleMusicId"),
-		metadatas.find((m) => m.key === "isrc"),
-	];
-
-	if (!musicIds.some((id) => id?.value?.length)) {
-		result.push(
-			t(
-				"submitToAMLLDB.validation.missingMusicId",
-				"元数据缺少音乐平台对应歌曲 ID",
-			),
-		);
-	}
-
-	return result;
+const sanitizeFileName = (value: string) => {
+	const sanitized = value.replace(/[\\/:*?"<>|]+/g, "_").replace(/\s+/g, " ");
+	const trimmed = sanitized.trim();
+	return trimmed.length > 0 ? trimmed : "lyric";
 };
+
+const buildGistFileName = (value: string) => {
+	const base = sanitizeFileName(value);
+	return base.toLowerCase().endsWith(".ttml") ? base : `${base}.ttml`;
+};
+
+const resolveUploadReason = (value: string) =>
+	value === "修正已有歌词" ? "修正已有歌词" : "新歌词提交";
 
 export const useSubmitToAMLLDBDialog = () => {
 	const { t } = useTranslation();
@@ -131,8 +106,10 @@ export const useSubmitToAMLLDBDialog = () => {
 	);
 	const emptySelectValue = "__select_empty__";
 	const noDataSelectValue = "__select_no_data__";
-	const store = useStore();
 	const setPushNotification = useSetAtom(pushNotificationAtom);
+	const setConfirmDialog = useSetAtom(confirmDialogAtom);
+	const pat = useAtomValue(githubPatAtom);
+	const lyric = useAtomValue(lyricLinesAtom);
 
 	const artistOptions = useMemo(
 		() => normalizeMetaValues(metadatas, "artists"),
@@ -255,6 +232,9 @@ export const useSubmitToAMLLDBDialog = () => {
 			.filter((value) => value.length > 0 && value !== emptySelectValue);
 		return segments.join(" - ");
 	}, [orderedFieldItems]);
+	useEffect(() => {
+		log("[SubmitToAMLLDB] 拼接结果:", name);
+	}, [name]);
 
 	const onNameOrderMove = useCallback(
 		(
@@ -278,8 +258,114 @@ export const useSubmitToAMLLDBDialog = () => {
 	//TODO: 接入新的提交流程(.\issue-builder => github\gist-service => github\issue-service => github\api)
 
 	const onSubmit = useCallback(async () => {
-		return console.log("not implemented yet");
-	}, []);
+		if (processing) return;
+		setProcessing(true);
+		try {
+			if (!pat) {
+				setPushNotification({
+					title: t(
+						"submitToAMLLDB.error.noToken",
+						"请先在设置中配置 GitHub Token",
+					),
+					level: "error",
+					source: "SubmitToAMLL",
+				});
+				return;
+			}
+
+			// 1. Generate TTML
+			const ttmlContent = exportTTMLText(lyric);
+			const fileName = buildGistFileName(name);
+
+			// 2. Upload to Gist
+			const gistResult = await createGithubGist(pat, {
+				description: `AMLL TTML Lyric Submission: ${name}`,
+				isPublic: false,
+				files: {
+					[fileName]: { content: ttmlContent },
+				},
+			});
+
+			const rawLink =
+				gistResult.files?.[fileName]?.raw_url ??
+				Object.values(gistResult.files ?? {})[0]?.raw_url;
+			if (!rawLink) {
+				throw new Error("Failed to get Gist raw URL");
+			}
+
+			// 3. Build Issue JSON
+			const issueContent = buildSubmitLyricIssueContent({
+				title: name,
+				ttmlDownloadUrl: rawLink,
+				uploadReason: resolveUploadReason(submitReason),
+				comment: comment,
+			});
+
+			// 4. Create Issue
+			const pushResult = await createGithubIssue({
+				token: pat,
+				repoOwner: "amll-dev",
+				repoName: "amll-ttml-db",
+				title: issueContent.title,
+				body: issueContent.body,
+				labels: issueContent.labels,
+				assignees: issueContent.assignees,
+			});
+
+			if (!pushResult.ok) {
+				const message = pushResult.message
+					? ` ${pushResult.message}`
+					: "";
+				throw new Error(
+					`Push failed with status ${pushResult.status ?? "unknown"}${message}`,
+				);
+			}
+
+			setPushNotification({
+				title: t("submitToAMLLDB.success", "提交成功！"),
+				level: "success",
+				source: "SubmitToAMLL",
+			});
+			setDialogOpen(false);
+			if (pushResult.issueUrl) {
+				setConfirmDialog({
+					open: true,
+					title: t("submitToAMLLDB.success", "提交成功！"),
+					description: "是否前往 GitHub 查看？",
+					onConfirm: () => {
+						window.open(
+							pushResult.issueUrl,
+							"_blank",
+							"noopener,noreferrer",
+						);
+					},
+				});
+			}
+		} catch (e) {
+			log("SubmitToAMLLDB failed", e);
+			setPushNotification({
+				title: t(
+					"submitToAMLLDB.error.failed",
+					"提交失败，请检查网络或 Token 权限",
+				),
+				level: "error",
+				source: "SubmitToAMLL",
+			});
+		} finally {
+			setProcessing(false);
+		}
+	}, [
+		processing,
+		pat,
+		t,
+		lyric,
+		name,
+		submitReason,
+		comment,
+		setPushNotification,
+		setConfirmDialog,
+		setDialogOpen,
+	]);
 
 	return {
 		artistSelections,

@@ -47,10 +47,7 @@ const SUBMIT_LYRIC_TEMPLATE = {
 	},
 	labels: ["歌词提交/补正"],
 	assignees: ["Steve-xmh"],
-	body: {
-		markdown:
-			"标题中的 `歌词提交/补正` 请尽量根据实际提交内容改为 `歌词提交` 或 `歌词补正`，并填写上类似 `艺术家 - 歌曲名` 的歌曲信息，以便审核。\n在上传歌词之前请详细阅读[歌词规范文档](https://github.com/amll-dev/amll-ttml-db/blob/main/instructions/instruction.md)，并确认上传内容遵守了歌词规范。否则可能会被审核打回修改哦！",
-	},
+	body: {}
 };
 
 const resolveTitlePrefix = (input: SubmitLyricIssueInput) => {
@@ -73,7 +70,7 @@ const buildTitle = (rawTitle: string, prefix: string) => {
 	return `${prefix}${trimmed}`;
 };
 
-export const buildSubmitLyricIssueBoyJson = (
+export const buildSubmitLyricIssueJson = (
 	input: SubmitLyricIssueInput,
 ) => {
 	const payload: SubmitLyricIssuePayload = {
@@ -82,10 +79,6 @@ export const buildSubmitLyricIssueBoyJson = (
 		title: buildTitle(input.title, resolveTitlePrefix(input)),
 		assignees: input.assignees ?? SUBMIT_LYRIC_TEMPLATE.assignees,
 		body: [
-			{
-				type: "markdown",
-				attributes: { value: SUBMIT_LYRIC_TEMPLATE.body.markdown },
-			},
 			{
 				type: "input",
 				id: "ttml-download-url",
@@ -109,4 +102,34 @@ export const buildSubmitLyricIssueBoyJson = (
 	}
 
 	return JSON.stringify(payload);
+};
+
+export const buildSubmitLyricIssueContent = (
+	input: SubmitLyricIssueInput,
+) => {
+	const title = buildTitle(input.title, resolveTitlePrefix(input));
+	const comment = input.comment?.trim() ?? "";
+	const body = [
+		"_此投稿由AMLL TTML TOOL-test自动生成_",
+		"",
+		"### TTML 歌词文件下载直链",
+		"",
+		input.ttmlDownloadUrl,
+		"",
+		"### 提交缘由",
+		"",
+		input.uploadReason,
+		"",
+		"### 备注",
+		"",
+		comment || "",
+	].join("\n");
+	return {
+		title,
+		body,
+		labels: input.includeLabels ?? true
+			? input.labels ?? SUBMIT_LYRIC_TEMPLATE.labels
+			: undefined,
+		assignees: input.assignees ?? SUBMIT_LYRIC_TEMPLATE.assignees,
+	};
 };
