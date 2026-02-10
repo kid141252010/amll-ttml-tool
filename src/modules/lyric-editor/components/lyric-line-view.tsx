@@ -179,7 +179,29 @@ const SubLineEdit = memo(
 				const newValue = evt.currentTarget.value;
 				if (newValue !== line[type]) {
 					editLyricLines((state) => {
-						state.lyricLines[lineIndex][type] = newValue;
+						const targetLine = state.lyricLines[lineIndex];
+						const previousValue = targetLine[type];
+						targetLine[type] = newValue;
+						if (type === "translatedLyric") {
+							const byLang = targetLine.translatedLyricByLang;
+							if (!byLang) return;
+							const keys = Object.keys(byLang);
+							if (keys.length === 1) {
+								byLang[keys[0]] = newValue;
+								return;
+							}
+							const matched = Object.entries(byLang).find(([, value]) => {
+								const nextValue = value.trim().length > 0 ? value : "";
+								return nextValue === previousValue && value.trim().length > 0;
+							})?.[0];
+							if (matched) {
+								byLang[matched] = newValue;
+								return;
+							}
+							if (byLang.und !== undefined) {
+								byLang.und = newValue;
+							}
+						}
 					});
 				}
 			},
