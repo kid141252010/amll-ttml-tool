@@ -19,7 +19,7 @@
 
 你可以通过访问 [`https://amll-tool.20101214.xyz/`](https://amll-tool.20101214.xyz/)来使用本工具的在线版本。
 
-欢迎访问[ test 分支 amll-tool-test.20101214.xyz](https://amll-tool-test.20101214.xyz/)来体验最新的功能和最新的 BUG！（国内可访问）
+欢迎访问[ test 分支 amll-tool-test.20101214.xyz ](https://amll-tool-test.20101214.xyz/)来体验最新的功能和最新的 BUG！（国内可访问）
 
 也可以使用 Github Action 构建的 Tauri 桌面版本，具体见 [Github Action 构建 Tauri 桌面版本](https://github.com/Steve-xmh/amll-ttml-tool/actions/workflows/build-desktop.yaml)。
 
