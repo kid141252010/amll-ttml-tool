@@ -204,7 +204,8 @@ export const useRemoteReviewService = () => {
 				openFile(file, "ttml");
 				setToolMode(ToolMode.Edit);
 				return true;
-			} catch {
+			} catch (error) {
+				console.error("[RemoteReview] Failed to fetch remote file:", error);
 				setPushNotification({
 					title: "拉取远程文件失败",
 					level: "error",

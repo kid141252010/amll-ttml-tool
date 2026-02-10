@@ -7,7 +7,7 @@ import { type FC, useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import WindowControls from "$/components/WindowControls";
 import { useReviewTitleBar } from "$/modules/review/modals/useReviewTimingFlow.tsx";
-import { requestFileUpdatePush } from "$/modules/user/modals/request-file-update-push";
+import { requestFileUpdatePush } from "$/modules/user/services/request-file-update-push";
 import { githubAmlldbAccessAtom, githubPatAtom, lyricsSiteUserAtom } from "$/modules/settings/states";
 import { notificationCenterDialogAtom, confirmDialogAtom } from "$/states/dialogs";
 import {

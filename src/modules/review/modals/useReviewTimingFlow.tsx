@@ -26,7 +26,7 @@ import type { TTMLLyric } from "$/types/ttml";
 import { useFileOpener } from "$/hooks/useFileOpener";
 import { loadNeteaseAudio } from "$/modules/ncm/services/audio-service";
 import { NeteaseIdSelectDialog } from "$/modules/ncm/modals/NeteaseIdSelectDialog";
-import { requestFileUpdatePush } from "$/modules/user/modals/request-file-update-push";
+import { requestFileUpdatePush } from "$/modules/user/services/request-file-update-push";
 import { ReviewActionGroup } from "$/components/TitleBar/modals/ReviewActionGroup";
 import {
 	buildEditReport,

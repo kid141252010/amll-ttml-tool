@@ -315,7 +315,14 @@ export const ReviewExpandedContent = (options: {
 							</Text>
 						</Flex>
 						<Box className={options.styles.remarkText}>
-							<ReactMarkdown remarkPlugins={[remarkGfm]}>
+							<ReactMarkdown
+								remarkPlugins={[remarkGfm]}
+								components={{
+									a: (props) => (
+										<a {...props} target="_blank" rel="noreferrer noopener" />
+									),
+								}}
+							>
 								{remarkText}
 							</ReactMarkdown>
 						</Box>
