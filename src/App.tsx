@@ -161,11 +161,7 @@ function App() {
 	const [hasBackground, setHasBackground] = useState(false);
 	const [startupWarningOpen, setStartupWarningOpen] = useState(true);
 	const [startupWarningReady, setStartupWarningReady] = useState(false);
-	const effectiveTheme = customBackgroundImage
-		? "light"
-		: isDarkTheme
-			? "dark"
-			: "light";
+	const effectiveTheme = isDarkTheme ? "dark" : "light";
 	const { checkUpdate, status, update } = useAppUpdate();
 	const hasNotifiedRef = useRef(false);
 	const { t } = useTranslation();

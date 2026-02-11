@@ -32,6 +32,10 @@
 	backdrop-filter: blur(10px);
 }
 
+:global(.radix-themes.dark) .startupWarningOverlay {
+	background: rgba(0, 0, 0, 0.55);
+}
+
 .startupWarningCard {
 	padding: 32px;
 	border-radius: 16px;

@@ -26,6 +26,7 @@ const ReviewPage = () => {
 		from: DOMRect;
 		to: DOMRect;
 		phase: "opening" | "open" | "closing";
+		overlayTopInset: number;
 	} | null>(null);
 	const {
 		audioLoadPendingId,
@@ -95,13 +96,25 @@ const ReviewPage = () => {
 		[],
 	);
 
+	const getOverlayTopInset = useCallback(() => {
+		if (typeof document === "undefined") return 52;
+		const ribbonBar = document.querySelector("[data-ribbon-bar]");
+		if (ribbonBar instanceof HTMLElement) {
+			const top = ribbonBar.getBoundingClientRect().top;
+			if (Number.isFinite(top)) {
+				return Math.round(top);
+			}
+		}
+		return 52;
+	}, []);
+
 	const openExpanded = useCallback(
 		(pr: ReviewPullRequest, rect: DOMRect) => {
 			if (closeTimerRef.current) {
 				window.clearTimeout(closeTimerRef.current);
 				closeTimerRef.current = null;
 			}
-			const overlayTopInset = 44;
+			const overlayTopInset = getOverlayTopInset();
 			const containerRect = new DOMRect(
 				0,
 				overlayTopInset,
@@ -136,6 +149,7 @@ const ReviewPage = () => {
 				from: rect,
 				to: toRect,
 				phase: "opening",
+				overlayTopInset,
 			});
 			requestAnimationFrame(() => {
 				setExpandedCard((prev) =>
@@ -145,7 +159,7 @@ const ReviewPage = () => {
 				);
 			});
 		},
-		[],
+		[getOverlayTopInset],
 	);
 
 	const handleCardClick = useCallback(
@@ -372,6 +386,9 @@ const ReviewPage = () => {
 					className={`${styles.overlay} ${
 						expandedCard.phase === "open" ? styles.overlayVisible : ""
 					}`}
+					style={{
+						inset: `${expandedCard.overlayTopInset}px 0 0 0`,
+					}}
 					onClick={closeExpanded}
 				>
 					<Card
