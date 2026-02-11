@@ -545,7 +545,7 @@ const AuxiliaryDisplayField: FC = () => {
 
 export const EditModeRibbonBar: FC = forwardRef<HTMLDivElement>(
 	(_props, ref) => {
-		const editLyricLines = useSetAtom(lyricLinesAtom);
+		const editLyricLines = useSetImmerAtom(lyricLinesAtom);
 		const { t } = useTranslation();
 
 		return (
@@ -556,11 +556,8 @@ export const EditModeRibbonBar: FC = forwardRef<HTMLDivElement>(
 							size="1"
 							variant="soft"
 							onClick={() =>
-								editLyricLines((prev) => {
-									return {
-										...prev,
-										lyricLines: [...prev.lyricLines, newLyricLine()],
-									};
+								editLyricLines((draft) => {
+									draft.lyricLines.push(newLyricLine());
 								})
 							}
 						>
@@ -588,9 +585,9 @@ export const EditModeRibbonBar: FC = forwardRef<HTMLDivElement>(
 					<Grid columns="0fr 0fr" gap="4" gapY="1" flexGrow="1" align="center">
 						<CheckboxField
 							label={t("ribbonBar.editMode.bgLyric", "背景歌词")}
+							defaultValue={false}
 							isWordField={false}
 							fieldName="isBG"
-							defaultValue={false}
 						/>
 						<CheckboxField
 							label={t("ribbonBar.editMode.duetLyric", "对唱歌词")}
