@@ -293,12 +293,26 @@ const MetadataValueRow = ({
 										<Sparkle20Regular />
 									</IconButton>
 								</DropdownMenu.Trigger>
-								<DropdownMenu.Content>
+								<DropdownMenu.Content
+									style={{
+										maxWidth: "min(520px, 80vw)",
+										maxHeight: "200vh",
+										overflowY: "auto",
+										whiteSpace: "normal",
+									}}
+								>
 									{suggestions.map((suggestion, suggestionIndex) => (
 										<DropdownMenu.Item
 											key={`${suggestion.title}-${suggestionIndex}`}
 											onSelect={() => {
 												applySuggestionValues(suggestion.values);
+											}}
+											style={{
+												display: "block",
+												whiteSpace: "normal",
+												wordBreak: "break-word",
+												overflowWrap: "anywhere",
+												lineHeight: "auto",
 											}}
 										>
 											{suggestion.title}
