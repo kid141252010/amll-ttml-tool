@@ -2,6 +2,7 @@ import {
 	Add16Regular,
 	AlbumRegular,
 	Delete16Regular,
+	GlobeSearch20Regular,
 	Info16Regular,
 	MusicNote1Regular,
 	NumberSymbol16Regular,
@@ -15,6 +16,7 @@ import {
 	DropdownMenu,
 	Flex,
 	IconButton,
+	Spinner,
 	Text,
 	TextField,
 } from "@radix-ui/themes";
@@ -35,6 +37,10 @@ import {
 	getMeatdataSuggestion,
 	type MetaSuggestionResult,
 } from "$/modules/project/logic/meatdata-suggestion";
+import {
+	fetchNeteaseSongMeta,
+	type NeteaseSongMeta,
+} from "$/modules/ncm/services/meta-service";
 import { metadataEditorDialogAtom } from "$/states/dialogs.ts";
 import { lyricLinesAtom } from "$/states/main.ts";
 import type { TTMLLyric, TTMLMetadata } from "$/types/ttml";
@@ -53,6 +59,7 @@ interface MetadataEntryProps {
 	setLyricLines: (args: (prev: TTMLLyric) => void) => void;
 	option: SelectOption | null;
 	focusAddKeyButton: () => void;
+	requestNeteaseMeta: (id: string) => Promise<void>;
 }
 
 interface MetadataValueRowProps {
@@ -70,6 +77,7 @@ interface MetadataValueRowProps {
 	setFocusIndex: (value: number) => void;
 	focusAddKeyButton: () => void;
 	applySuggestionValues: (suggestions: string[]) => void;
+	requestNeteaseMeta: (id: string) => Promise<void>;
 }
 
 const MetadataValueRow = ({
@@ -87,6 +95,7 @@ const MetadataValueRow = ({
 	setFocusIndex,
 	focusAddKeyButton,
 	applySuggestionValues,
+	requestNeteaseMeta,
 }: MetadataValueRowProps) => {
 	const { t } = useTranslation();
 	const itemHasError = validation
@@ -102,6 +111,8 @@ const MetadataValueRow = ({
 	const isButtonEnabled = !!url && isValid;
 
 	const [suggestions, setSuggestions] = useState<MetaSuggestionResult[]>([]);
+	const [isFocused, setIsFocused] = useState(false);
+	const [isFetchingMeta, setIsFetchingMeta] = useState(false);
 
 	useEffect(() => {
 		let active = true;
@@ -145,6 +156,8 @@ const MetadataValueRow = ({
 	}, [entry.autoSuggested, index, option?.suggestion, setLyricLines, value, valueIndex]);
 
 	const hasSuggestion = suggestions.length > 0;
+	const canFetchNeteaseMeta =
+		entry.key === "ncmMusicId" && !isFocused && value.trim() !== "";
 
 	return (
 		<tr key={`metadata-${entry.key}-${valueIndex}`}>
@@ -233,6 +246,8 @@ const MetadataValueRow = ({
 						className={`${styles.metadataInput} ${
 							dragInputIndex === valueIndex ? styles.dragOverInput : ""
 						}`}
+						onFocus={() => setIsFocused(true)}
+						onBlur={() => setIsFocused(false)}
 						onChange={(e) => {
 							const newValue = e.currentTarget.value;
 							setLyricLines((prev) => {
@@ -321,6 +336,25 @@ const MetadataValueRow = ({
 								</DropdownMenu.Content>
 							</DropdownMenu.Root>
 						))}
+					{canFetchNeteaseMeta && (
+						<IconButton
+							variant="soft"
+							disabled={isFetchingMeta}
+							onClick={async () => {
+								if (isFetchingMeta) return;
+								const trimmed = value.trim();
+								if (!trimmed) return;
+								setIsFetchingMeta(true);
+								try {
+									await requestNeteaseMeta(trimmed);
+								} finally {
+									setIsFetchingMeta(false);
+								}
+							}}
+						>
+							{isFetchingMeta ? <Spinner size="1" /> : <GlobeSearch20Regular />}
+						</IconButton>
+					)}
 					{isLinkable && (
 						<IconButton
 							disabled={!isButtonEnabled}
@@ -361,7 +395,14 @@ const MetadataValueRow = ({
 };
 
 const MetadataEntry = memo(
-	({ entry, index, setLyricLines, option, focusAddKeyButton }: MetadataEntryProps) => {
+	({
+		entry,
+		index,
+		setLyricLines,
+		option,
+		focusAddKeyButton,
+		requestNeteaseMeta,
+	}: MetadataEntryProps) => {
 		const validation = option?.validation;
 		const rowHasError = validation
 			? entry.value.some(
@@ -511,6 +552,7 @@ const MetadataEntry = memo(
 							setFocusIndex={setFocusIndex}
 							focusAddKeyButton={focusAddKeyButton}
 							applySuggestionValues={applySuggestionValues}
+							requestNeteaseMeta={requestNeteaseMeta}
 						/>
 					);
 				})}
@@ -575,8 +617,80 @@ export const MetadataEditor = () => {
 	const [customKey, setCustomKey] = useState("");
 	const [lyricLines, setLyricLines] = useImmerAtom(lyricLinesAtom);
 	const addKeyButtonRef = useRef<HTMLButtonElement | null>(null);
+	const neteaseMetaCacheRef = useRef<Map<string, NeteaseSongMeta>>(
+		new Map(),
+	);
 
 	const { t } = useTranslation();
+	const appendMetadataValues = useCallback(
+		(key: string, values: string[]) => {
+			const normalized = values
+				.map((value) => value.trim())
+				.filter((value) => value !== "");
+			if (normalized.length === 0) return;
+			setLyricLines((prev) => {
+				let entry = prev.metadata.find((item) => item.key === key);
+				if (!entry) {
+					entry = { key, value: [] };
+					prev.metadata.push(entry);
+				}
+				const existingSet = new Set<string>();
+				const emptyIndices: number[] = [];
+				entry.value.forEach((val, i) => {
+					const trimmed = val.trim();
+					if (!trimmed) {
+						emptyIndices.push(i);
+					} else {
+						existingSet.add(trimmed);
+					}
+				});
+				for (const value of normalized) {
+					if (existingSet.has(value)) continue;
+					if (emptyIndices.length > 0) {
+						const slotIndex = emptyIndices.shift();
+						if (slotIndex === undefined) {
+							entry.value.push(value);
+						} else {
+							entry.value[slotIndex] = value;
+						}
+					} else {
+						entry.value.push(value);
+					}
+					existingSet.add(value);
+				}
+				entry.autoSuggested = false;
+			});
+		},
+		[setLyricLines],
+	);
+
+	const requestNeteaseMeta = useCallback(
+		async (id: string) => {
+			const trimmed = id.trim();
+			if (!trimmed) return;
+			const cached = neteaseMetaCacheRef.current.get(trimmed);
+			const meta =
+				cached ??
+				(await fetchNeteaseSongMeta(trimmed).catch(() => null));
+			if (!meta) return;
+			if (!cached) {
+				neteaseMetaCacheRef.current.set(trimmed, meta);
+			}
+			appendMetadataValues("musicName", [
+				meta.name,
+				...meta.aliases,
+				...meta.translations,
+			]);
+			appendMetadataValues("artists", meta.artists);
+			if (meta.album) {
+				appendMetadataValues("album", [meta.album]);
+			}
+			for (const [key, values] of Object.entries(meta.lyricMetadata)) {
+				appendMetadataValues(key, values);
+			}
+		},
+		[appendMetadataValues],
+	);
 
 	const builtinOptions: SelectOption[] = useMemo(() => {
 		const numeric = (value: string) => /^\d+$/.test(value);
@@ -820,6 +934,7 @@ export const MetadataEditor = () => {
 								setLyricLines={setLyricLines}
 								option={findOptionByKey(v.key)}
 								focusAddKeyButton={focusAddKeyButton}
+								requestNeteaseMeta={requestNeteaseMeta}
 							/>
 						))}
 					</table>
