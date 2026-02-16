@@ -53,6 +53,7 @@ import {
 	lyricLinesAtom,
 	selectedLinesAtom,
 	selectedWordsAtom,
+	showEndTimeAsDurationAtom,
 	ToolMode,
 	toolModeAtom,
 } from "$/states/main.ts";
@@ -297,6 +298,7 @@ export const LyricLineView: FC<{
 	const editLyricLines = useSetImmerAtom(lyricLinesAtom);
 	const visualizeTimestampUpdate = useAtomValue(visualizeTimestampUpdateAtom);
 	const showTimestamps = useAtomValue(showTimestampsAtom);
+	const showEndTimeAsDuration = useAtomValue(showEndTimeAsDurationAtom);
 	const toolMode = useAtomValue(toolModeAtom);
 	const store = useStore();
 	const wordsContainerRef = useRef<HTMLDivElement>(null);
@@ -802,7 +804,9 @@ export const LyricLineView: FC<{
 										{msToTimestamp(line.startTime)}
 									</div>
 									<div className={styles.endTime} ref={endTimeRef}>
-										{msToTimestamp(line.endTime)}
+										{showEndTimeAsDuration
+											? `+${line.endTime - line.startTime}ms`
+											: msToTimestamp(line.endTime)}
 									</div>
 								</Flex>
 							)}
