@@ -22,9 +22,9 @@ jobs:
               uses: aormsby/Fork-Sync-With-Upstream-action@v3.4
               with:
                   target_repo_token: ${{ secrets.GITHUB_TOKEN }}
-                  upstream_sync_repo: amll-dev/amll-ttml-tool
-                  upstream_sync_branch: main
-                  target_sync_branch: main
+                  upstream_sync_repo: Xionghaizi001/amll-ttml-tool
+                  upstream_sync_branch: amll-ttml-tool-test
+                  target_sync_branch: amll-ttml-tool-test
                   test_mode: false
 
             - name: Check for Failure
