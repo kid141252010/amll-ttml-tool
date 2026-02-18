@@ -1,75 +1,75 @@
 import { githubFetch } from "$/modules/github/api";
 
-type PushIssueBoyOptions = {
+export type CreateIssueOptions = {
 	token: string;
 	repoOwner: string;
 	repoName: string;
-	filePath: string;
-	jsonContent: string;
-	commitMessage: string;
-	branch?: string;
+	title: string;
+	body: string;
+	labels?: string[];
+	assignees?: string[];
 };
 
-type PushIssueBoyResult = {
+export type CreateIssueResult = {
 	ok: boolean;
 	status?: number;
-	contentSha?: string;
+	message?: string;
+	issueNumber?: number;
+	issueUrl?: string;
 };
 
-const encodeBase64 = (value: string) =>
-	btoa(String.fromCharCode(...new TextEncoder().encode(value)));
+const parseErrorDetail = async (response: Response) => {
+	const errorText = await response.text();
+	if (!errorText) return "";
+	try {
+		const parsed = JSON.parse(errorText) as {
+			message?: string;
+			errors?: unknown;
+		};
+		const message = parsed.message ?? errorText;
+		return parsed.errors !== undefined
+			? `${message}: ${JSON.stringify(parsed.errors)}`
+			: message;
+	} catch {
+		return errorText;
+	}
+};
 
-const normalizePath = (value: string) =>
-	value
-		.split("/")
-		.filter((segment) => segment.length > 0)
-		.map((segment) => encodeURIComponent(segment))
-		.join("/");
-
-export const pushIssueBoyJson = async (
-	options: PushIssueBoyOptions,
-): Promise<PushIssueBoyResult> => {
-	const path = normalizePath(options.filePath);
-	const baseHeaders = {
+export const createGithubIssue = async (
+	options: CreateIssueOptions,
+): Promise<CreateIssueResult> => {
+	const headers = {
 		Accept: "application/vnd.github+json",
 		Authorization: `Bearer ${options.token}`,
+		"X-GitHub-Api-Version": "2022-11-28",
+		"Content-Type": "application/json",
 	};
-	const detailResponse = await githubFetch(
-		`/repos/${options.repoOwner}/${options.repoName}/contents/${path}`,
-		{
-			params: options.branch ? { ref: options.branch } : undefined,
-			init: { headers: baseHeaders },
-		},
-	);
-	let sha: string | undefined;
-	if (detailResponse.ok) {
-		const detail = (await detailResponse.json()) as { sha?: string };
-		sha = detail.sha;
-	} else if (detailResponse.status !== 404) {
-		return { ok: false, status: detailResponse.status };
-	}
-
 	const response = await githubFetch(
-		`/repos/${options.repoOwner}/${options.repoName}/contents/${path}`,
+		`/repos/${options.repoOwner}/${options.repoName}/issues`,
 		{
 			init: {
-				method: "PUT",
-				headers: {
-					...baseHeaders,
-					"Content-Type": "application/json",
-				},
+				method: "POST",
+				headers,
 				body: JSON.stringify({
-					message: options.commitMessage,
-					content: encodeBase64(options.jsonContent),
-					...(options.branch ? { branch: options.branch } : {}),
-					...(sha ? { sha } : {}),
+					title: options.title,
+					body: options.body,
+					...(options.labels ? { labels: options.labels } : {}),
+					...(options.assignees ? { assignees: options.assignees } : {}),
 				}),
 			},
 		},
 	);
 	if (!response.ok) {
-		return { ok: false, status: response.status };
+		const message = await parseErrorDetail(response);
+		return { ok: false, status: response.status, message };
 	}
-	const data = (await response.json()) as { content?: { sha?: string } };
-	return { ok: true, contentSha: data.content?.sha };
+	const data = (await response.json()) as {
+		number?: number;
+		html_url?: string;
+	};
+	return {
+		ok: true,
+		issueNumber: data.number,
+		issueUrl: data.html_url,
+	};
 };

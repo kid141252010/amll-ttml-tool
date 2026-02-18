@@ -16,14 +16,30 @@
 
 .overlay {
 	position: fixed;
-	inset: 44px 0 0 0;
-	background: rgba(255, 255, 255, 0.6);
+	inset: 52px 0 0 0;
+	--overlay-bg: rgba(255, 255, 255, 0.6);
+	background: var(--overlay-bg);
 	backdrop-filter: blur(14px);
 	-webkit-backdrop-filter: blur(14px);
 	z-index: 40;
 	opacity: 0;
 	transition: opacity 180ms ease;
 }
+
+/* .overlay::before {
+	content: "";
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 0;
+	height: 16px;
+	background: linear-gradient(
+		to bottom,
+		var(--overlay-edge, var(--overlay-bg)),
+		transparent
+	);
+	pointer-events: none;
+} */
 
 .overlayVisible {
 	opacity: 1;
@@ -293,6 +309,15 @@
 	background-color: var(--color-panel);
 	max-width: 350px;
 	width: 100%;
+}
+
+:global(.radix-themes.dark) .overlay {
+	--overlay-bg: #00000087;
+	--overlay-edge: #1b1b1b57;
+}
+
+:global(.radix-themes.dark) .card {
+	background-color: #ffffff1f;
 }
 
 .cardPlaceholder {

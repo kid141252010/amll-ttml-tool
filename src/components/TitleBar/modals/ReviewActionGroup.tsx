@@ -34,7 +34,7 @@ export const ReviewActionGroup = ({
 			{showStash && (
 				<Button
 					size="1"
-					variant="solid"
+					variant="soft"
 					color="orange"
 					onClick={onOpenStash}
 					disabled={!stashEnabled}

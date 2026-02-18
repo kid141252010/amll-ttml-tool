@@ -31,7 +31,22 @@ export const createGithubGist = async (
 		},
 	});
 	if (!response.ok) {
-		throw new Error("create-gist-failed");
+		const errorText = await response.text();
+		let detail = errorText;
+		try {
+			const parsed = JSON.parse(errorText) as {
+				message?: string;
+				errors?: unknown;
+			};
+			const message = parsed.message ?? errorText;
+			detail =
+				parsed.errors !== undefined
+					? `${message}: ${JSON.stringify(parsed.errors)}`
+					: message;
+		} catch {
+			detail = errorText;
+		}
+		throw new Error(`create-gist-failed:${response.status}:${detail}`);
 	}
 	return (await response.json()) as GithubGistResponse;
 };

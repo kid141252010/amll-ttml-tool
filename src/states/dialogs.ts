@@ -3,6 +3,7 @@ import { atom } from "jotai";
 export const importFromTextDialogAtom = atom(false);
 export const metadataEditorDialogAtom = atom(false);
 export const vocalTagsEditorDialogAtom = atom(false);
+export const metaSuggestionManagerDialogAtom = atom(false);
 export const settingsDialogAtom = atom(false);
 export const settingsTabAtom = atom("common");
 export const latencyTestDialogAtom = atom(false);
@@ -29,7 +30,13 @@ export const confirmDialogAtom = atom<{
 	open: boolean;
 	title: string;
 	description: string;
-	onConfirm?: () => void;
+	onConfirm?: (value?: string) => void;
+	onCancel?: () => void;
+	input?: {
+		placeholder?: string;
+		defaultValue?: string;
+		validate?: (value: string) => string | null;
+	};
 }>({
 	open: false,
 	title: "",
