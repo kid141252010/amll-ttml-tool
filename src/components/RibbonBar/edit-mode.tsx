@@ -352,6 +352,7 @@ function EditField<
 					size="1"
 					variant="ghost"
 					onClick={() => setShowDurationInput((v) => !v)}
+					style={{ justifyContent: "flex-start" }}
 				>
 					{showDurationInput
 						? t("ribbonBar.editMode.duration", "持续时间")
