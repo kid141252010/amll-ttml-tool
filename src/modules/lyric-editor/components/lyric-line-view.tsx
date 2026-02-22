@@ -298,7 +298,11 @@ export const LyricLineView: FC<{
 	const startTimeRef = useRef<HTMLDivElement>(null);
 	const endTimeRef = useRef<HTMLButtonElement>(null);
 	const [enableInsert, setEnableInsert] = useState(false);
-	const endTimeLinked = !!line.endTimeLink;
+	const [endTimeLinked, setEndTimeLinked] = useState(() =>
+		Boolean(line.endTimeLink),
+	);
+	const originalEndTimeRef = useRef<number | null>(null);
+	const originalNextStartTimeRef = useRef<number | null>(null);
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: 用于呈现时间戳更新效果
 	useEffect(() => {
@@ -368,6 +372,11 @@ export const LyricLineView: FC<{
 			targetLine.startTime = line.endTime;
 		});
 	}, [endTimeLinked, editLyricLines, line.endTime, lineIndex, lyricLines]);
+	useEffect(() => {
+		const linked = Boolean(line.endTimeLink);
+		if (linked === endTimeLinked) return;
+		setEndTimeLinked(linked);
+	}, [endTimeLinked, line.endTimeLink]);
 
 	const suggestedRomans = useMemo(() => {
 		if (!enablePrediction) {
@@ -382,6 +391,9 @@ export const LyricLineView: FC<{
 			evt.preventDefault();
 			evt.stopPropagation();
 			if (endTimeLinked) {
+				setEndTimeLinked(false);
+				originalEndTimeRef.current = null;
+				originalNextStartTimeRef.current = null;
 				editLyricLines((state) => {
 					const targetLine = state.lyricLines[lineIndex];
 					if (!targetLine) return;
@@ -407,21 +419,29 @@ export const LyricLineView: FC<{
 				});
 				return;
 			}
+			if (!nextLine) return;
+			originalEndTimeRef.current = line.endTime;
+			originalNextStartTimeRef.current = nextLine?.startTime ?? null;
 			editLyricLines((state) => {
 				const targetLine = state.lyricLines[lineIndex];
 				if (!targetLine) return;
 				const nextTarget = state.lyricLines[lineIndex + 1];
-				const originalEndTime = targetLine.endTime;
-				const originalNextStartTime = nextTarget?.startTime ?? null;
-				const desiredEndTime =
-					nextTarget?.startTime ?? targetLine.endTime;
-				targetLine.endTime = desiredEndTime;
-				if (nextTarget) nextTarget.startTime = desiredEndTime;
+				if (!nextTarget) return;
+				const originalEndTime =
+					targetLine.endTimeLink?.originalEndTime ?? targetLine.endTime;
+				const originalNextStartTime =
+					targetLine.endTimeLink?.originalNextStartTime ??
+					nextTarget.startTime ??
+					null;
+				const desiredEndTime = nextTarget.startTime ?? targetLine.endTime;
 				targetLine.endTimeLink = {
 					originalEndTime,
 					originalNextStartTime,
 				};
+				targetLine.endTime = desiredEndTime;
+				nextTarget.startTime = desiredEndTime;
 			});
+			setEndTimeLinked(true);
 		},
 		[
 			editLyricLines,
