@@ -66,6 +66,18 @@ import LyricWordView from "./lyric-word-view.tsx";
 import { RomanWordView } from "./roman-word-view.tsx";
 
 const isDraggingAtom = atom(false);
+const parseRubyShortcut = (value: string) => {
+	if (value.endsWith("|")) {
+		return {
+			word: value.slice(0, -1),
+			enableRuby: true,
+		};
+	}
+	return {
+		word: value,
+		enableRuby: false,
+	};
+};
 
 const parseLineVocalIds = (value?: string | string[]) => {
 	if (!value) return [];
@@ -464,6 +476,7 @@ export const LyricLineView: FC<{
 				});
 				return;
 			}
+			// const nextLine = lyricLines.lyricLines[lineIndex + 1];
 			if (!nextLine) return;
 			originalEndTimeRef.current = line.endTime;
 			originalNextStartTimeRef.current = nextLine?.startTime ?? null;
@@ -781,10 +794,14 @@ export const LyricLineView: FC<{
 												if (evt.key === "Enter") {
 													evt.preventDefault();
 													evt.stopPropagation();
+													const { word, enableRuby } = parseRubyShortcut(
+														evt.currentTarget.value,
+													);
 													editLyricLines((state) => {
 														state.lyricLines[lineIndex].words.push({
 															...newLyricWord(),
-															word: evt.currentTarget.value,
+															word,
+															ruby: enableRuby ? [] : undefined,
 														});
 													});
 													evt.currentTarget.value = "";
