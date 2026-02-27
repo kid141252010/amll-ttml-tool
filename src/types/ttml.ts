@@ -9,6 +9,7 @@
  * https://github.com/Steve-xmh/amll-ttml-tool/blob/main/LICENSE
  */
 
+import type { OptimizeLyricOptions } from "@applemusic-like-lyrics/core";
 import type {
 	LyricLine as AMLLLyricLine,
 	LyricWord as AMLLLyricWord,
@@ -31,6 +32,7 @@ export interface TTMLLyric {
 	metadata: TTMLMetadata[];
 	lyricLines: LyricLine[];
 	vocalTags?: TTMLVocalTag[];
+	optimizeOptions?: OptimizeLyricOptions;
 }
 
 export interface LyricWordBase {
