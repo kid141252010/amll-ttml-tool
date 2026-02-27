@@ -325,6 +325,7 @@
 	opacity: 0.55;
 	border: 1px dashed var(--gray-6);
 	pointer-events: none;
+	box-sizing: border-box;
 }
 
 .reviewCard {
