@@ -43,8 +43,12 @@ export interface LyricWordBase {
 export interface LyricWord extends AMLLLyricWord {
 	// 用来确定唯一一个单词的标识符，导出时不会保存
 	id: string;
+	startTime: number;
+	endTime: number;
+	word: string;
 	obscene: boolean;
 	emptyBeat: number;
+	romanWord: string;
 	romanWarning?: boolean;
 	ruby?: LyricWordBase[];
 }
