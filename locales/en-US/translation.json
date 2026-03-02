@@ -329,7 +329,8 @@
 			{
 				"index": "Per-Word Romanization",
 				"check": "Check Per-Word Romanization",
-				"distribute": "Distribute Romanization..."
+				"distribute": "Distribute Romanization...",
+				"autoRuby": "Auto Ruby"
 			},
 			"help": "Help",
 			"helpDoc": "Documentation (CN)",

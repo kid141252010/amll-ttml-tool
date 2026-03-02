@@ -329,7 +329,8 @@
 			{
 				"index": "逐字音译",
 				"check": "检查逐字音译一致性",
-				"distribute": "自动分配罗马音..."
+				"distribute": "自动分配罗马音...",
+				"autoRuby": "自动注音"
 			},
 			"help": "帮助",
 			"helpDoc": "使用说明",
